@@ -332,6 +332,8 @@ CATransform3D fbsdkdfl_CATransform3DConcat(CATransform3D a, CATransform3D b)
   return f(a, b);
 }
 
+#if !FBSDK_IDFA_DISALLOWED
+
 #pragma mark - Ad Support Classes
 
 _fbsdkdfl_load_framework_once_impl_(AdSupport)
@@ -344,6 +346,8 @@ Class fbsdkdfl_ASIdentifierManagerClass(void)
   _fbsdkdfl_AdSupport_get_c(ASIdentifierManager);
   return c;
 }
+
+#endif // !FBSDK_IDFA_DISALLOWED
 
 #pragma mark - Safari Services
 _fbsdkdfl_load_framework_once_impl_(SafariServices)
