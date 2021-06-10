@@ -128,7 +128,11 @@ _fbsdkdfl_handle_get_impl_(Security)
 
 - (Class)asIdentifierManagerClass
 {
+#if FBSDK_IDFA_DISALLOWED
+  return nil;
+#else
   return fbsdkdfl_ASIdentifierManagerClass();
+#endif
 }
 
 #define _fbsdkdfl_Security_get_k(SYMBOL) _fbsdkdfl_symbol_get_k(Security, SYMBOL, CFTypeRef *)
