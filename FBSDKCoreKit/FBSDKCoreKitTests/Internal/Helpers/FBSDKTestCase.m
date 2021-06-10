@@ -28,10 +28,12 @@
 
 #import "FBSDKAppEvents.h"
 #import "FBSDKAppEvents+Internal.h"
+#import "FBSDKAppEventsConfigurationManager.h"
 #import "FBSDKAppEventsState.h"
 #import "FBSDKApplicationDelegate+Internal.h"
+#import "FBSDKBridgeAPI.h"
+#import "FBSDKBridgeAPI+Internal.h"
 #import "FBSDKCoreKit+Internal.h"
-#import "FBSDKCoreKitTestUtility.h"
 #import "FBSDKCrashObserver.h"
 #import "FBSDKCrashShield.h"
 #import "FBSDKErrorReport.h"
@@ -48,6 +50,8 @@
 @interface FBSDKAppEvents (Testing)
 @property (nonatomic, assign) BOOL disableTimer;
 + (FBSDKAppEvents *)singleton;
+- (instancetype)initWithFlushBehavior:(FBSDKAppEventsFlushBehavior)flushBehavior
+                 flushPeriodInSeconds:(int)flushPeriodInSeconds;
 @end
 
 @interface FBSDKAppEventsConfigurationManager (Testing)
@@ -101,7 +105,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   [self setUpGraphRequestConnectionClassMock];
   [self setUpCrashShieldClassMock];
   [self setUpSharedApplicationMock];
-  [self setUpLoggerClassMock];
   [self setUpTransitionCoordinatorMock];
   [self setUpBridgeApiClassMock];
   [self setUpAppEventsConfigurationManagerClassMock];
@@ -176,9 +179,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   [_sharedApplicationMock stopMocking];
   _sharedApplicationMock = nil;
 
-  [_loggerClassMock stopMocking];
-  _loggerClassMock = nil;
-
   [_transitionCoordinatorMock stopMocking];
   _transitionCoordinatorMock = nil;
 
@@ -233,7 +233,10 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
     // Since the `init` method is marked unavailable but just as a measure to prevent creating multiple
     // instances and enforce the singleton pattern, we will circumvent that by casting to a plain `NSObject`
     // after `alloc` in order to call `init`.
-    _appEventsMock = OCMPartialMock([(NSObject *)[FBSDKAppEvents alloc] init]);
+    _appEventsMock = OCMPartialMock(
+      [[FBSDKAppEvents alloc] initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
+                               flushPeriodInSeconds:0]
+    );
   } else {
     _appEventsMock = OCMClassMock([FBSDKAppEvents class]);
   }
@@ -320,11 +323,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   OCMStub(ClassMethod([_sharedApplicationMock sharedApplication])).andReturn(_sharedApplicationMock);
 }
 
-- (void)setUpLoggerClassMock
-{
-  self.loggerClassMock = OCMClassMock(FBSDKLogger.class);
-}
-
 - (void)setUpTransitionCoordinatorMock
 {
   self.transitionCoordinatorMock = [OCMockObject
@@ -353,16 +351,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
 
 #pragma mark - Public Methods
 
-- (void)stubAppID:(NSString *)appID
-{
-  [OCMStub(ClassMethod([_settingsClassMock appID])) andReturn:appID];
-}
-
-- (void)stubLoadingGateKeepers
-{
-  OCMStub(ClassMethod([_gatekeeperManagerClassMock loadGateKeepers:OCMArg.any]));
-}
-
 - (void)stubFetchingCachedServerConfiguration
 {
   FBSDKServerConfiguration *configuration = [FBSDKServerConfiguration defaultServerConfigurationForAppID:_appID];
@@ -384,16 +372,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   OCMStub(ClassMethod([_profileClassMock fetchCachedProfile])).andReturn(profile);
 }
 
-- (void)stubGraphAPIVersionWith:(NSString *)version
-{
-  OCMStub(ClassMethod([_settingsClassMock graphAPIVersion])).andReturn(version);
-}
-
-- (void)stubClientTokenWith:(nullable NSString *)token
-{
-  OCMStub(ClassMethod([_settingsClassMock clientToken])).andReturn(token);
-}
-
 - (void)stubAppEventsUtilityShouldDropAppEventWith:(BOOL)shouldDropEvent
 {
   OCMStub(ClassMethod([_appEventsUtilityClassMock shouldDropAppEvent])).andReturn(shouldDropEvent);
@@ -407,11 +385,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
 - (void)stubLoadingAdNetworkReporterConfiguration
 {
   OCMStub(ClassMethod([_adNetworkReporterClassMock _loadConfigurationWithBlock:OCMArg.any]));
-}
-
-- (void)stubSettingsShouldLimitEventAndDataUsageWith:(BOOL)shouldLimit
-{
-  OCMStub(ClassMethod([_settingsClassMock shouldLimitEventAndDataUsage])).andReturn(shouldLimit);
 }
 
 - (void)stubAppEventsUtilityAdvertiserIDWith:(nullable NSString *)identifier
@@ -435,11 +408,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   OCMStub(ClassMethod([_serverConfigurationManagerClassMock loadServerConfigurationWithCompletionBlock:OCMArg.isNil]));
 }
 
-- (void)stubGraphRequestWithResult:(id)result error:(nullable NSError *)error connection:(nullable FBSDKGraphRequestConnection *)connection
-{
-  OCMStub([_graphRequestMock startWithCompletionHandler:([OCMArg invokeBlockWithArgs:[self nsNullIfNil:connection], [self nsNullIfNil:result], [self nsNullIfNil:error], nil])]);
-}
-
 - (void)stubGraphRequestPiggybackManagerLastRefreshTryWith:(NSDate *)date
 {
   OCMStub(ClassMethod([_graphRequestPiggybackManagerMock _lastRefreshTry])).andReturn(date);
@@ -447,17 +415,7 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
 
 - (void)stubAllocatingGraphRequestConnection
 {
-  OCMStub(ClassMethod([_graphRequestConnectionClassMock alloc]));
-}
-
-- (void)stubIsDataProcessingRestricted:(BOOL)isRestricted
-{
-  OCMStub(ClassMethod([_settingsClassMock isDataProcessingRestricted])).andReturn(isRestricted);
-}
-
-- (void)stubFacebookDomainPartWith:(NSString *)domainPart
-{
-  OCMStub(ClassMethod([_settingsClassMock facebookDomainPart])).andReturn(domainPart);
+  OCMStub(ClassMethod([_graphRequestConnectionClassMock alloc])).andReturn(_graphRequestConnectionClassMock);
 }
 
 - (void)stubOpenURLWith:(BOOL)openURL
@@ -475,16 +433,6 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
   }
 }
 
-- (void)stubAppUrlSchemeSuffixWith:(NSString *)suffix
-{
-  OCMStub(ClassMethod([_settingsClassMock appURLSchemeSuffix])).andReturn(suffix);
-}
-
-- (void)stubUserAgentSuffixWith:(nullable NSString *)suffix
-{
-  OCMStub(ClassMethod([self.settingsClassMock userAgentSuffix])).andReturn(suffix);
-}
-
 - (void)stubAppUrlSchemeWith:(nullable NSString *)scheme
 {
   OCMStub([self.internalUtilityClassMock appURLScheme]).andReturn(scheme);
@@ -498,7 +446,7 @@ typedef void (^FBSDKSKAdNetworkReporterBlock)(void);
 - (void)stubStartGCDTimerWithInterval
 {
   // Note: the '5' is arbitrary and ignored but needs to be there for compilation.
-  OCMStubIgnoringNonObjectArgs(ClassMethod([self.utilityClassMock startGCDTimerWithInterval:5 block:OCMArg.any]));
+  OCMStub(ClassMethod([self.utilityClassMock startGCDTimerWithInterval:5 block:OCMArg.any]));
 }
 
 - (void)stubIsAdvertiserTrackingEnabledWith:(BOOL)isAdvertiserTrackingEnabled

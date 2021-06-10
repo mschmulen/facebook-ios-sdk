@@ -32,16 +32,22 @@ class FBSDKAEMReporterTests: XCTestCase {
     static let priority = "priority"
     static let events = "events"
     static let eventName = "event_name"
+    static let advertiserID = "advertiser_id"
+    static let businessID = "advertiser_id"
+    static let campaignID = "campaign_id"
+    static let token = "token"
   }
 
   enum Values {
     static let purchase = "fb_mobile_purchase"
     static let donate = "Donate"
     static let defaultMode = "DEFAULT"
+    static let brandMode = "BRAND"
     static let USD = "USD"
   }
 
-  var requestProvider = TestGraphRequestFactory()
+  let request = TestGraphRequest()
+  let requestProvider = TestGraphRequestFactory()
   let date = Calendar.current.date(
     byAdding: .day,
     value: -2,
@@ -51,72 +57,79 @@ class FBSDKAEMReporterTests: XCTestCase {
   lazy var reportFilePath = FBSDKBasicUtility.persistenceFilePath(name)
   let urlWithInvocation = URL(string: "fb123://test.com?al_applink_data=%7B%22acs_token%22%3A+%22test_token_1234567%22%2C+%22campaign_ids%22%3A+%22test_campaign_1234%22%2C+%22advertiser_id%22%3A+%22test_advertiserid_12345%22%7D")! // swiftlint:disable:this line_length force_unwrapping
 
-  override func setUp() {
+  override class func setUp() {
     super.setUp()
 
     reset()
-    FBSDKAEMReporter.isEnabled = true
-    FBSDKAEMReporter.reportFilePath = reportFilePath
   }
 
-  func reset() {
-    FBSDKAEMReporter.configure(withRequestProvider: requestProvider)
-    FBSDKAEMReporter.queue = DispatchQueue.main
-    FBSDKAEMReporter.invocations = []
-    FBSDKAEMReporter.completionBlocks = []
-    FBSDKAEMReporter.isLoadingConfiguration = false
-    FBSDKAEMReporter.configs = [:]
-    FBSDKAEMReporter._clearCache()
+  override func setUp() {
+    super.setUp()
+
     removeReportFile()
+    requestProvider.stubbedRequest = request
+    AEMReporter.configure(withRequestProvider: requestProvider)
+    // Actual queue doesn't matter as long as it's not the same as the designated queue name in the class
+    AEMReporter.queue = DispatchQueue(label: name, qos: .background)
+    AEMReporter.isEnabled = true
+    AEMReporter.reportFilePath = reportFilePath
+  }
+
+  class func reset() {
+    AEMReporter.invocations = []
+    AEMReporter.completionBlocks = []
+    AEMReporter.isLoadingConfiguration = false
+    AEMReporter.configs = [:]
+    AEMReporter._clearCache()
   }
 
   func testEnable() {
-    FBSDKAEMReporter.isEnabled = false
-    FBSDKAEMReporter.enable()
+    AEMReporter.isEnabled = false
+    AEMReporter.enable()
 
-    XCTAssertTrue(FBSDKAEMReporter.isEnabled, "AEM Report should be enabled")
+    XCTAssertTrue(AEMReporter.isEnabled, "AEM Report should be enabled")
   }
 
   func testParseURL() {
     var url: URL?
-    XCTAssertNil(FBSDKAEMReporter.parseURL(url))
+    XCTAssertNil(AEMReporter.parseURL(url))
 
     url = URL(string: "fb123://test.com")
-    XCTAssertNil(FBSDKAEMReporter.parseURL(url))
+    XCTAssertNil(AEMReporter.parseURL(url))
 
     url = URL(string: "fb123://test.com?al_applink_data=%7B%22acs_token%22%3A+%22test_token_1234567%22%2C+%22campaign_ids%22%3A+%22test_campaign_1234%22%7D") // swiftlint:disable:this line_length
-    var invocation = FBSDKAEMReporter.parseURL(url)
+    var invocation = AEMReporter.parseURL(url)
     XCTAssertEqual(invocation?.acsToken, "test_token_1234567")
     XCTAssertEqual(invocation?.campaignID, "test_campaign_1234")
-    XCTAssertNil(invocation?.advertiserID)
+    XCTAssertNil(invocation?.businessID)
 
-    invocation = FBSDKAEMReporter.parseURL(urlWithInvocation)
+    invocation = AEMReporter.parseURL(urlWithInvocation)
     XCTAssertEqual(invocation?.acsToken, "test_token_1234567")
     XCTAssertEqual(invocation?.campaignID, "test_campaign_1234")
-    XCTAssertEqual(invocation?.advertiserID, "test_advertiserid_12345")
+    XCTAssertEqual(invocation?.businessID, "test_advertiserid_12345")
   }
 
   func testLoadReportData() {
-    guard let invocation = FBSDKAEMReporter.parseURL(urlWithInvocation) else {
+    guard let invocation = AEMReporter.parseURL(urlWithInvocation) else {
       return XCTFail("Parsing Error")
     }
 
-    FBSDKAEMReporter.invocations = [invocation]
-    FBSDKAEMReporter._saveReportData()
-    let data = FBSDKAEMReporter._loadReportData() as? [FBSDKAEMInvocation]
+    AEMReporter.invocations = [invocation]
+    AEMReporter._saveReportData()
+    let data = AEMReporter._loadReportData() as? [AEMInvocation]
     XCTAssertEqual(data?.count, 1)
     XCTAssertEqual(data?[0].acsToken, "test_token_1234567")
     XCTAssertEqual(data?[0].campaignID, "test_campaign_1234")
-    XCTAssertEqual(data?[0].advertiserID, "test_advertiserid_12345")
+    XCTAssertEqual(data?[0].businessID, "test_advertiserid_12345")
   }
 
   func testLoadConfigs() {
-    FBSDKAEMReporter._addConfigs([SampleAEMData.validConfigData1])
-    FBSDKAEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
-    let loadedConfigs: NSMutableDictionary? = FBSDKAEMReporter._loadConfigs()
+    AEMReporter._addConfigs([SampleAEMData.validConfigData1])
+    AEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
+    let loadedConfigs: NSMutableDictionary? = AEMReporter._loadConfigs()
     XCTAssertEqual(loadedConfigs?.count, 1, "Should load the expected number of configs")
 
-    let defaultConfigs: [FBSDKAEMConfiguration]? = loadedConfigs?[Values.defaultMode] as? [FBSDKAEMConfiguration]
+    let defaultConfigs: [AEMConfiguration]? = loadedConfigs?[Values.defaultMode] as? [AEMConfiguration]
     XCTAssertEqual(
       defaultConfigs?.count, 2, "Should load the expected number of default configs"
     )
@@ -153,26 +166,26 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testClearCache() {
-    FBSDKAEMReporter._addConfigs([SampleAEMData.validConfigData1])
-    FBSDKAEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
+    AEMReporter._addConfigs([SampleAEMData.validConfigData1])
+    AEMReporter._addConfigs([SampleAEMData.validConfigData1, SampleAEMData.validConfigData2])
 
-    FBSDKAEMReporter._clearCache()
-    var configs: NSDictionary? = FBSDKAEMReporter.configs
-    var configList: [FBSDKAEMConfiguration]? = configs?[Values.defaultMode] as? [FBSDKAEMConfiguration]
+    AEMReporter._clearCache()
+    var configs = AEMReporter.configs
+    var configList: [AEMConfiguration]? = configs[Values.defaultMode] as? [AEMConfiguration]
     XCTAssertEqual(configList?.count, 1, "Should have the expected number of configs")
 
-    guard let invocation1 = FBSDKAEMInvocation(
+    guard let invocation1 = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
       acsConfigID: "test_config_id_123",
-      advertiserID: "test_advertiserid_12345"
-    ), let invocation2 = FBSDKAEMInvocation(
+      businessID: nil
+    ), let invocation2 = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
       acsConfigID: "test_config_id_123",
-      advertiserID: "test_advertiserid_12345"
+      businessID: nil
     )
     else { return XCTFail("Unwrapping Error") }
     invocation1.setConfigID(10000)
@@ -180,16 +193,18 @@ class FBSDKAEMReporterTests: XCTestCase {
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
     invocation2.setConversionTimestamp(date)
-    FBSDKAEMReporter.invocations = [invocation1, invocation2]
-    FBSDKAEMReporter._addConfigs(
+    AEMReporter.invocations = [invocation1, invocation2]
+    AEMReporter._addConfigs(
       [SampleAEMData.validConfigData1, SampleAEMData.validConfigData2, SampleAEMData.validConfigData3]
     )
-    FBSDKAEMReporter._clearCache()
-    let invocations = FBSDKAEMReporter.invocations as? [FBSDKAEMInvocation]
-    XCTAssertEqual(invocations?.count, 1, "Should clear the expired invocation")
-    XCTAssertEqual(invocations?[0].configID, 10000, "Should keep the expected invocation")
-    configs = FBSDKAEMReporter.configs
-    configList = configs?[Values.defaultMode] as? [FBSDKAEMConfiguration]
+    AEMReporter._clearCache()
+    guard let invocations = AEMReporter.invocations as? [AEMInvocation] else {
+      return XCTFail("Should have invocations")
+    }
+    XCTAssertEqual(invocations.count, 1, "Should clear the expired invocation")
+    XCTAssertEqual(invocations[0].configID, 10000, "Should keep the expected invocation")
+    configs = AEMReporter.configs
+    configList = configs[Values.defaultMode] as? [AEMConfiguration]
     XCTAssertEqual(configList?.count, 2, "Should have the expected number of configs")
     XCTAssertEqual(configList?[0].validFrom, 10000, "Should keep the expected config")
     XCTAssertEqual(configList?[1].validFrom, 20000, "Should keep the expected config")
@@ -198,8 +213,8 @@ class FBSDKAEMReporterTests: XCTestCase {
   func testHandleURL() {
     guard let url = URL(string: "fb123://test.com?al_applink_data=%7B%22acs_token%22%3A+%22test_token_1234567%22%2C+%22campaign_ids%22%3A+%22test_campaign_1234%22%7D") // swiftlint:disable:this line_length
     else { return XCTFail("Unwrapping Error") }
-    FBSDKAEMReporter.handle(url)
-    let invocations = FBSDKAEMReporter.invocations
+    AEMReporter.handle(url)
+    let invocations = AEMReporter.invocations
     XCTAssertTrue(
       invocations.count > 0, // swiftlint:disable:this empty_count
       "Handling a url that contains invocations should set the invocations on the reporter"
@@ -207,32 +222,90 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testIsConfigRefreshTimestampValid() {
-    FBSDKAEMReporter.timestamp = Date()
+    AEMReporter.timestamp = Date()
     XCTAssertTrue(
-      FBSDKAEMReporter._isConfigRefreshTimestampValid(),
+      AEMReporter._isConfigRefreshTimestampValid(),
       "Timestamp should be valid"
     )
 
     guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
     else { return XCTFail("Date Creation Error") }
-    FBSDKAEMReporter.timestamp = date
+    AEMReporter.timestamp = date
     XCTAssertFalse(
-      FBSDKAEMReporter._isConfigRefreshTimestampValid(),
+      AEMReporter._isConfigRefreshTimestampValid(),
       "Timestamp should not be valid"
     )
   }
 
+  func testShouldRefreshWithoutBusinessID1() {
+    AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
+    AEMReporter.timestamp = Date()
+    AEMReporter.configs = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()]
+    ]
+
+    XCTAssertFalse(
+      AEMReporter._shouldRefresh(),
+      "Should not refresh config if timestamp is not expired and there is no business ID"
+    )
+  }
+
+  func testShouldRefreshWithoutBusinessID2() {
+    AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
+    guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
+    else { return XCTFail("Date Creation Error") }
+    AEMReporter.timestamp = date
+    AEMReporter.configs = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()]
+    ]
+
+    XCTAssertTrue(
+      AEMReporter._shouldRefresh(),
+      "Should not refresh config if timestamp is expired"
+    )
+  }
+
+  func testShouldRefreshWithoutBusinessID3() {
+    AEMReporter.invocations = [SampleAEMData.invocationWithoutAdvertiserID]
+    guard let date = Calendar.current.date(byAdding: .day, value: -2, to: Date())
+    else { return XCTFail("Date Creation Error") }
+    AEMReporter.timestamp = date
+    AEMReporter.configs = [:]
+
+    XCTAssertTrue(
+      AEMReporter._shouldRefresh(),
+      "Should not refresh config if configs is empty"
+    )
+  }
+
+  func testShouldRefreshWithBusinessID() {
+    AEMReporter.invocations = [
+      SampleAEMData.invocationWithoutAdvertiserID,
+      SampleAEMData.invocationWithAdvertiserID1
+    ]
+    AEMReporter.timestamp = Date()
+    AEMReporter.configs = [
+      Values.defaultMode: [SampleAEMConfigurations.createConfigWithoutBusinessID()]
+    ]
+
+    XCTAssertTrue(
+      AEMReporter._shouldRefresh(),
+      "Should not refresh config if there exists an invocation with business ID"
+    )
+  }
+
   func testSendAggregationRequest() {
-    FBSDKAEMReporter._sendAggregationRequest()
+    AEMReporter.invocations = []
+    AEMReporter._sendAggregationRequest()
     XCTAssertNil(
       self.requestProvider.capturedGraphPath,
       "GraphRequest should be created because of there is no invocation"
     )
 
-    guard let invocation = FBSDKAEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
+    guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
-    FBSDKAEMReporter.invocations = [invocation]
-    FBSDKAEMReporter._sendAggregationRequest()
+    AEMReporter.invocations = [invocation]
+    AEMReporter._sendAggregationRequest()
     XCTAssertTrue(
       self.requestProvider.capturedGraphPath?.hasSuffix("aem_conversions") == true,
       "GraphRequst should created because of there is non-aggregated invocation"
@@ -242,10 +315,10 @@ class FBSDKAEMReporterTests: XCTestCase {
   func testCompletingAggregationRequestWithError() {
     let request = TestGraphRequest()
     requestProvider.stubbedRequest = request
-    guard let invocation = FBSDKAEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
+    guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
-    FBSDKAEMReporter.invocations = [invocation]
-    FBSDKAEMReporter._sendAggregationRequest()
+    AEMReporter.invocations = [invocation]
+    AEMReporter._sendAggregationRequest()
 
     request.capturedCompletionHandler?(nil, nil, SampleError())
     XCTAssertFalse(
@@ -261,10 +334,10 @@ class FBSDKAEMReporterTests: XCTestCase {
   func testCompletingAggregationRequestWithoutError() {
     let request = TestGraphRequest()
     requestProvider.stubbedRequest = request
-    guard let invocation = FBSDKAEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
+    guard let invocation = AEMReporter.parseURL(urlWithInvocation) else { return XCTFail("Parsing Error") }
     invocation.isAggregated = false
-    FBSDKAEMReporter.invocations = [invocation]
-    FBSDKAEMReporter._sendAggregationRequest()
+    AEMReporter.invocations = [invocation]
+    AEMReporter._sendAggregationRequest()
 
     request.capturedCompletionHandler?(nil, nil, nil)
     XCTAssertTrue(
@@ -278,21 +351,21 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testRecordAndUpdateEvents() {
-    FBSDKAEMReporter.timestamp = Date()
-    guard let invocation = FBSDKAEMInvocation(
+    AEMReporter.timestamp = Date()
+    guard let invocation = AEMInvocation(
       campaignID: "test_campaign_1234",
       acsToken: "test_token_1234567",
       acsSharedSecret: "test_shared_secret",
       acsConfigID: "test_config_id_123",
-      advertiserID: "test_advertiserid_12345"
+      businessID: nil
     )
     else { return XCTFail("Unwrapping Error") }
-    guard let config = FBSDKAEMConfiguration(json: SampleAEMData.validConfigData3)
+    guard let config = AEMConfiguration(json: SampleAEMData.validConfigData3)
     else { return XCTFail("Unwrapping Error") }
 
-    FBSDKAEMReporter.configs = [Values.defaultMode: [config]]
-    FBSDKAEMReporter.invocations = NSMutableArray(array: [invocation])
-    FBSDKAEMReporter.recordAndUpdateEvent(Values.purchase, currency: Values.USD, value: 100)
+    AEMReporter.configs = [Values.defaultMode: [config]]
+    AEMReporter.invocations = [invocation]
+    AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
     // Invocation should be attributed and updated while request should be sent
     XCTAssertTrue(
       self.requestProvider.capturedGraphPath?.hasSuffix("aem_conversions") == true,
@@ -306,26 +379,31 @@ class FBSDKAEMReporterTests: XCTestCase {
       FileManager.default.fileExists(atPath: self.reportFilePath),
       "Should save uploaded events to disk"
     )
+    XCTAssertEqual(
+      request.startCallCount,
+      1,
+      "Should start the graph request to update the conversions"
+    )
   }
 
   func testRecordAndUpdateEventsWithAEMDisabled() {
-    FBSDKAEMReporter.isEnabled = false
-    FBSDKAEMReporter.timestamp = date
+    AEMReporter.isEnabled = false
+    AEMReporter.timestamp = date
 
-    FBSDKAEMReporter.recordAndUpdateEvent(Values.purchase, currency: Values.USD, value: 100)
+    AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
     XCTAssertNil(
-      requestProvider.capturedGraphPath?.hasSuffix("aem_conversion_configs"),
+      requestProvider.capturedGraphPath,
       "Should not create a request to fetch the config if AEM is disabled"
     )
   }
 
   func testRecordAndUpdateEventsWithEmptyEvent() {
-    FBSDKAEMReporter.timestamp = self.date
+    AEMReporter.timestamp = self.date
 
-    FBSDKAEMReporter.recordAndUpdateEvent("", currency: Values.USD, value: 100)
+    AEMReporter.recordAndUpdate(event: "", currency: Values.USD, value: 100, parameters: nil)
 
     XCTAssertNil(
-      requestProvider.capturedGraphPath?.hasSuffix("aem_conversion_configs"),
+      requestProvider.capturedGraphPath,
       "Should not create a request to fetch the config if the event being recorded is empty"
     )
     XCTAssertFalse(
@@ -335,10 +413,10 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testRecordAndUpdateEventsWithEmptyConfigs() {
-    FBSDKAEMReporter.timestamp = date
-    FBSDKAEMReporter.invocations = [testInvocation]
+    AEMReporter.timestamp = date
+    AEMReporter.invocations = [testInvocation]
 
-    FBSDKAEMReporter.recordAndUpdateEvent(Values.purchase, currency: Values.USD, value: 100)
+    AEMReporter.recordAndUpdate(event: Values.purchase, currency: Values.USD, value: 100, parameters: nil)
     guard testInvocation.attributionCallCount == 0,
           testInvocation.updateConversionCallCount == 0 else {
       return XCTFail("Should update attribute and conversions")
@@ -346,13 +424,13 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithBlock() {
-    guard let config = FBSDKAEMConfiguration(json: SampleAEMData.validConfigData3)
+    guard let config = AEMConfiguration(json: SampleAEMData.validConfigData3)
     else { return XCTFail("Unwrapping Error") }
     var blockCall = 0
-    FBSDKAEMReporter.timestamp = Date()
-    FBSDKAEMReporter.configs = [Values.defaultMode: [config]]
+    AEMReporter.timestamp = Date()
+    AEMReporter.configs = [Values.defaultMode: [config]]
 
-    FBSDKAEMReporter._loadConfiguration { _ in
+    AEMReporter._loadConfiguration { _ in
       blockCall += 1
     }
     XCTAssertEqual(
@@ -363,12 +441,215 @@ class FBSDKAEMReporterTests: XCTestCase {
   }
 
   func testLoadConfigurationWithoutBlock() {
-    FBSDKAEMReporter.timestamp = date
+    AEMReporter.timestamp = date
 
-    FBSDKAEMReporter._loadConfiguration(block: nil)
-    XCTAssertTrue(
-      self.requestProvider.capturedGraphPath?.hasSuffix("aem_conversion_configs") == true,
-      "Should not require a completion block to load a configuration"
+    AEMReporter.isLoadingConfiguration = false
+    AEMReporter._loadConfiguration(block: nil)
+    guard let path = self.requestProvider.capturedGraphPath,
+          path.hasSuffix("aem_conversion_configs")
+    else {
+      return XCTFail("Should not require a completion block to load a configuration")
+    }
+  }
+
+  func testGetConfigRequestParameterWithoutAdvertiserIDs() {
+    AEMReporter.invocations = NSMutableArray(array: [SampleAEMData.invocationWithoutAdvertiserID])
+
+    XCTAssertEqual(
+      AEMReporter._requestParameters() as NSDictionary,
+      ["advertiser_ids": "[]"],
+      "Should not have unexpected advertiserIDs in config request params"
+    )
+  }
+
+  func testGetConfigRequestParameterWithAdvertiserIDs() {
+    AEMReporter.invocations =
+        NSMutableArray(array: [SampleAEMData.invocationWithAdvertiserID1, SampleAEMData.invocationWithoutAdvertiserID])
+
+    XCTAssertEqual(
+      AEMReporter._requestParameters() as NSDictionary,
+      ["advertiser_ids": "[\"\(SampleAEMData.invocationWithAdvertiserID1.businessID!)\"]"], // swiftlint:disable:this force_unwrapping line_length
+      "Should have expected advertiserIDs in config request params"
+    )
+
+    AEMReporter.invocations =
+        NSMutableArray(array: [SampleAEMData.invocationWithAdvertiserID1, SampleAEMData.invocationWithAdvertiserID2, SampleAEMData.invocationWithoutAdvertiserID]) // swiftlint:disable:this line_length
+
+    XCTAssertEqual(
+      AEMReporter._requestParameters() as NSDictionary,
+      ["advertiser_ids": "[\"\(SampleAEMData.invocationWithAdvertiserID1.businessID!)\",\"\(SampleAEMData.invocationWithAdvertiserID2.businessID!)\"]"], // swiftlint:disable:this force_unwrapping line_length
+      "Should have expected advertiserIDs in config request params"
+    )
+  }
+
+  func testGetAggregationRequestParameterWithoutAdvertiserID() {
+    let params: [String: Any] =
+      AEMReporter._aggregationRequestParameters(SampleAEMData.invocationWithoutAdvertiserID)
+
+    XCTAssertEqual(
+      params[Keys.campaignID] as? String,
+      SampleAEMData.invocationWithoutAdvertiserID.campaignID,
+      "Should have expected campaign_id in aggregation request params"
+    )
+    XCTAssertEqual(
+      params[Keys.token] as? String,
+      SampleAEMData.invocationWithoutAdvertiserID.acsToken,
+      "Should have expected ACS token in aggregation request params"
+    )
+    XCTAssertNil(
+      params[Keys.businessID],
+      "Should not have unexpected advertiser_id in aggregation request params"
+    )
+  }
+
+  func testGetAggregationRequestParameterWithAdvertiserID() {
+    let params: [String: Any] =
+      AEMReporter._aggregationRequestParameters(SampleAEMData.invocationWithAdvertiserID1)
+
+    XCTAssertEqual(
+      params[Keys.campaignID] as? String,
+      SampleAEMData.invocationWithAdvertiserID1.campaignID,
+      "Should have expected campaign_id in aggregation request params"
+    )
+    XCTAssertEqual(
+      params[Keys.token] as? String,
+      SampleAEMData.invocationWithAdvertiserID1.acsToken,
+      "Should have expected ACS token in aggregation request params"
+    )
+    XCTAssertNotNil(
+      params[Keys.businessID],
+      "Should have expected advertiser_id in aggregation request params"
+    )
+  }
+
+  func testAttributedInvocationWithoutParameters() {
+    let invocations = [
+      SampleAEMData.invocationWithoutAdvertiserID,
+      SampleAEMData.invocationWithAdvertiserID1,
+      SampleAEMData.invocationWithAdvertiserID2
+    ]
+    let configs = [
+      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()])
+    ]
+
+    let attributedInvocation = AEMReporter._attributedInvocation(
+      invocations,
+      event: Values.purchase,
+      currency: nil,
+      value: nil,
+      parameters: nil,
+      configs: configs
+    )
+    XCTAssertNotNil(
+      attributedInvocation,
+      "Should have invocation attributed"
+    )
+    XCTAssertNil(
+      attributedInvocation?.businessID,
+      "The attributed invocation should not have advertiser ID"
+    )
+  }
+
+  func testAttributedInvocationWithParameters() {
+    let invocations = [
+      SampleAEMData.invocationWithoutAdvertiserID,
+      SampleAEMData.invocationWithAdvertiserID1,
+      SampleAEMData.invocationWithAdvertiserID2
+    ]
+    let configs = [
+      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()])
+    ]
+
+    let attributedInvocation = AEMReporter._attributedInvocation(
+      invocations,
+      event: "test",
+      currency: nil,
+      value: nil,
+      parameters: ["values": "abcdefg"],
+      configs: configs
+    )
+    XCTAssertNil(
+      attributedInvocation,
+      "Should not have invocation attributed"
+    )
+  }
+
+  func testAttributedInvocationWithUnmatchedParameters() {
+    let invocations = [
+      SampleAEMData.invocationWithoutAdvertiserID,
+      SampleAEMData.invocationWithAdvertiserID1,
+      SampleAEMData.invocationWithAdvertiserID2
+    ]
+    let configs = [
+      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()])
+    ]
+
+    let attributedInvocation = AEMReporter._attributedInvocation(
+      invocations,
+      event: Values.purchase,
+      currency: nil,
+      value: nil,
+      parameters: ["value": "abcdefg"],
+      configs: configs
+    )
+    XCTAssertNotNil(
+      attributedInvocation,
+      "Should have invocation attributed"
+    )
+    XCTAssertEqual(
+      attributedInvocation?.businessID,
+      SampleAEMData.invocationWithAdvertiserID1.businessID,
+      "The attributed invocation should have advertiser ID"
+    )
+  }
+
+  func testAttributedInvocationWithMultipleGeneralInvocations() {
+    let invocation1 = SampleAEMInvocations.createGeneralInvocation1()
+    let invocation2 = SampleAEMInvocations.createGeneralInvocation2()
+    let invocations = [invocation1, invocation2]
+    let configs = [
+      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()])
+    ]
+
+    let attributedInvocation = AEMReporter._attributedInvocation(
+      invocations,
+      event: Values.purchase,
+      currency: nil,
+      value: nil,
+      parameters: nil,
+      configs: configs
+    )
+    XCTAssertEqual(
+      attributedInvocation?.campaignID,
+      invocation2.campaignID,
+      "Should attribute the event to the latest general invocation"
+    )
+  }
+
+  func testAttributedInvocationWithUnmatchedEvent() {
+    let invocation1 = SampleAEMInvocations.createGeneralInvocation1()
+    let invocation2 = SampleAEMInvocations.createGeneralInvocation2()
+    let invocations = [invocation1, invocation2]
+    let configs = [
+      Values.defaultMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithoutBusinessID()]),
+      Values.brandMode: NSMutableArray(array: [SampleAEMConfigurations.createConfigWithBusinessID()])
+    ]
+
+    let attributedInvocation = AEMReporter._attributedInvocation(
+      invocations,
+      event: "test",
+      currency: nil,
+      value: nil,
+      parameters: nil,
+      configs: configs
+    )
+    XCTAssertNil(
+      attributedInvocation,
+      "Should not attribute the event with incorrect event"
     )
   }
 
@@ -379,4 +660,4 @@ class FBSDKAEMReporterTests: XCTestCase {
       try FileManager.default.removeItem(at: URL(fileURLWithPath: reportFilePath))
     } catch _ as NSError { }
   }
-}
+} // swiftlint:disable:this file_length

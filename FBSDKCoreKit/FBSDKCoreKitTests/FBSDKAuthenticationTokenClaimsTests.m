@@ -37,11 +37,18 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
                         iat:(long)iat
                         sub:(NSString *)sub
                        name:(nullable NSString *)name
+                  givenName:(nullable NSString *)givenName
+                 middleName:(nullable NSString *)middleName
+                 familyName:(nullable NSString *)familyName
                       email:(nullable NSString *)email
                     picture:(nullable NSString *)picture
                 userFriends:(nullable NSArray<NSString *> *)userFriends
                userBirthday:(nullable NSString *)userBirthday
-               userAgeRange:(nullable NSDictionary<NSString *, NSNumber *> *)userAgeRange;
+               userAgeRange:(nullable NSDictionary<NSString *, NSNumber *> *)userAgeRange
+               userHometown:(nullable NSDictionary<NSString *, NSString *> *)userHometown
+               userLocation:(nullable NSDictionary<NSString *, NSString *> *)userLocation
+                 userGender:(nullable NSString *)userGender
+                   userLink:(nullable NSString *)userLink;
 
 + (nullable FBSDKAuthenticationTokenClaims *)claimsFromEncodedString:(NSString *)encodedClaims nonce:(NSString *)expectedNonce;
 
@@ -61,7 +68,14 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
 {
   [super setUp];
 
-  [self stubAppID:_mockAppID];
+  [FBSDKSettings reset];
+  [TestAppEventsConfigurationProvider reset];
+  [FBSDKSettings configureWithStore:[UserDefaultsSpy new]
+     appEventsConfigurationProvider:TestAppEventsConfigurationProvider.class
+             infoDictionaryProvider:[TestBundle new]
+                        eventLogger:[TestAppEvents new]];
+
+  FBSDKSettings.appID = _mockAppID;
 
   long currentTime = [[NSNumber numberWithDouble:[[NSDate date] timeIntervalSince1970]] longValue];
 
@@ -73,14 +87,29 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
                                                             iat:currentTime - 60 // 1 min ago
                                                             sub:@"1234"
                                                            name:@"Test User"
+                                                      givenName:@"Test"
+                                                     middleName:@"Middle"
+                                                     familyName:@"User"
                                                           email:@"email@email.com"
                                                         picture:@"https://www.facebook.com/some_picture"
                                                     userFriends:@[@"1122", @"3344", @"5566"]
                                                    userBirthday:@"01/01/1990"
                                                    userAgeRange:@{@"min" : @((long)21)}
+                                                   userHometown:@{@"id" : @"112724962075996", @"name" : @"Martinez, California"}
+                                                   userLocation:@{@"id" : @"110843418940484", @"name" : @"Seattle, Washington"}
+                                                     userGender:@"male"
+                                                       userLink:@"facebook.com"
   ];
 
   _claimsDict = [self dictionaryFromClaims:_claims];
+}
+
+- (void)tearDown
+{
+  [super tearDown];
+
+  [FBSDKSettings reset];
+  [TestAppEventsConfigurationProvider reset];
 }
 
 // MARK: - Decoding Claims
@@ -161,7 +190,7 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
 
 - (void)testDecodeClaimsWithInvalidOptionalClaims
 {
-  for (NSString *claim in @[@"name", @"email", @"picture", @"user_friends", @"user_birthday", @"user_age_range"]) {
+  for (NSString *claim in @[@"name", @"given_name", @"middle_name", @"family_name", @"email", @"picture", @"user_friends", @"user_birthday", @"user_age_range", @"user_hometown", @"user_location", @"user_gender", @"user_link"]) {
     [self assertDecodeClaimsDropInvalidEntry:claim value:nil];
     [self assertDecodeClaimsDropInvalidEntry:claim value:NSDictionary.new];
   }
@@ -171,6 +200,14 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
   [self assertDecodeClaimsDropInvalidEntry:@"user_age_range" value:@""];
   [self assertDecodeClaimsDropInvalidEntry:@"user_age_range" value:@{@"min" : @((long)123), @"max" : @"test"}];
   [self assertDecodeClaimsDropInvalidEntry:@"user_age_range" value:@{}];
+
+  [self assertDecodeClaimsDropInvalidEntry:@"user_hometown" value:@{@"id" : @((long)123), @"name" : @"test"}];
+  [self assertDecodeClaimsDropInvalidEntry:@"user_hometown" value:@""];
+  [self assertDecodeClaimsDropInvalidEntry:@"user_hometown" value:@{}];
+
+  [self assertDecodeClaimsDropInvalidEntry:@"user_location" value:@{@"id" : @((long)123), @"name" : @"test"}];
+  [self assertDecodeClaimsDropInvalidEntry:@"user_location" value:@""];
+  [self assertDecodeClaimsDropInvalidEntry:@"user_location" value:@{}];
 }
 
 - (void)testDecodeClaimsWithEmptyFriendsList
@@ -259,11 +296,18 @@ static NSString *const _facebookURL = @"https://facebook.com/dialog/oauth";
   [dict setValue:claims.jti forKey:@"jti"];
   [dict setValue:claims.sub forKey:@"sub"];
   [dict setValue:claims.name forKey:@"name"];
+  [dict setValue:claims.givenName forKey:@"given_name"];
+  [dict setValue:claims.middleName forKey:@"middle_name"];
+  [dict setValue:claims.familyName forKey:@"family_name"];
   [dict setValue:claims.email forKey:@"email"];
   [dict setValue:claims.picture forKey:@"picture"];
   [dict setValue:claims.userFriends forKey:@"user_friends"];
   [dict setValue:claims.userBirthday forKey:@"user_birthday"];
   [dict setValue:claims.userAgeRange forKey:@"user_age_range"];
+  [dict setValue:claims.userHometown forKey:@"user_hometown"];
+  [dict setValue:claims.userLocation forKey:@"user_location"];
+  [dict setValue:claims.userGender forKey:@"user_gender"];
+  [dict setValue:claims.userLink forKey:@"user_link"];
 
   return dict;
 }

@@ -18,6 +18,10 @@
 
 #import "FBSDKBridgeAPITests.h"
 
+@interface FBSDKBridgeAPI ()
+@property (nonnull, nonatomic) FBSDKLogger *logger;
+@end
+
 @implementation FBSDKBridgeAPITests
 
 - (void)setUp
@@ -27,6 +31,8 @@
   [FBSDKLoginManager resetTestEvidence];
 
   _api = [[FBSDKBridgeAPI alloc] initWithProcessInfo:[TestProcessInfo new]];
+  _logger = [[TestLogger alloc] initWithLoggingBehavior:FBSDKLoggingBehaviorDeveloperErrors];
+  _api.logger = _logger;
   _partialMock = OCMPartialMock(_api);
 
   [self stubLoadingAppEventsConfiguration];
@@ -38,6 +44,7 @@
   [_partialMock stopMocking];
   _partialMock = nil;
   [FBSDKLoginManager resetTestEvidence];
+  [TestLogger reset];
 
   [super tearDown];
 }
@@ -544,7 +551,7 @@
 
   [self.api viewControllerDidDisappear:container animated:NO];
 
-  OCMVerify([self.loggerClassMock singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors logEntry:@"**ERROR**:\n The SFSafariViewController's parent view controller was dismissed.\nThis can happen if you are triggering login from a UIAlertController. Instead, make sure your top most view controller will not be prematurely dismissed."]);
+  XCTAssertEqualObjects(_logger.capturedContents, @"**ERROR**:\n The SFSafariViewController's parent view controller was dismissed.\nThis can happen if you are triggering login from a UIAlertController. Instead, make sure your top most view controller will not be prematurely dismissed.");
   OCMVerify([_partialMock safariViewControllerDidFinish:viewControllerSpy]);
 }
 
@@ -552,10 +559,11 @@
 {
   FBSDKContainerViewController *container = [FBSDKContainerViewController new];
 
-  OCMReject([self.loggerClassMock singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors logEntry:OCMArg.any]);
   OCMReject([_partialMock safariViewControllerDidFinish:OCMArg.any]);
 
   [self.api viewControllerDidDisappear:container animated:NO];
+
+  XCTAssertEqualObjects(_logger.capturedContents, @"", @"Expected nothing to be logged");
 }
 
 // MARK: - Bridge Response Url Handling

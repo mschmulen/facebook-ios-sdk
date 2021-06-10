@@ -20,10 +20,9 @@ import FBSDKCoreKit
 
 @objcMembers
 class TestGraphRequestPiggybackManager: NSObject, GraphRequestPiggybackManaging {
-  static var capturedConnection: GraphRequestConnection?
+  static var capturedConnection: GraphRequestConnecting?
 
-  // swiftlint:disable:next implicitly_unwrapped_optional
-  static func addPiggybackRequests(_ connection: GraphRequestConnection!) {
+  static func addPiggybackRequests(_ connection: GraphRequestConnecting) {
     capturedConnection = connection
   }
 

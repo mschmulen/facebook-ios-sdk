@@ -347,6 +347,82 @@ class LoginButtonTests: XCTestCase {
       "Should not try to fetch content for a token if the user identifier has not changed"
     )
   }
+
+  // MARK: - Setting Messenger Page ID
+
+  func testDefaultMessengerPageId() {
+    XCTAssertNil(FBLoginButton().messengerPageId, "Should not have a default Messenger Page ID")
+  }
+
+  func testSettingMessengerPageId() {
+    button.messengerPageId = "1234"
+
+    XCTAssertEqual(
+      button.messengerPageId,
+      "1234",
+      "Should set a valid Messenger Page ID"
+    )
+  }
+
+  func testLoginConfigurationWithMessengerPageId() {
+    button.messengerPageId = "1234"
+
+    XCTAssertNotNil(
+      button.loginConfiguration(),
+      "Should be able to create a configuration with Messenger Page Id"
+    )
+  }
+
+  // MARK: - Setting Auth Type
+
+  func testDefaultAuthType() {
+    XCTAssertEqual(
+      FBLoginButton().authType,
+      LoginAuthType.rerequest,
+      "Default auth_type should be rerequest"
+    )
+  }
+
+  func testSettingAuthType() {
+    button.authType = .reauthorize
+
+    XCTAssertEqual(
+      button.authType,
+      .reauthorize,
+      "Should set a valid auth type"
+    )
+  }
+
+  func testLoginConfigurationWithAuthType() {
+    button.authType = .reauthorize
+
+    XCTAssertNotNil(
+      button.loginConfiguration(),
+      "Should be able to create a configuration with auth type"
+    )
+    XCTAssertEqual(button.loginConfiguration().authType,
+                   .reauthorize)
+  }
+
+  func testLoginConfigurationWithNilAuthType() {
+    button.authType = nil
+
+    XCTAssertNotNil(
+      button.loginConfiguration(),
+      "Should be able to create a configuration with nil auth type"
+    )
+    XCTAssertEqual(button.loginConfiguration().authType,
+                   nil)
+  }
+
+  func testLoginConfigurationWithNoAuthType() {
+    XCTAssertNotNil(
+      button.loginConfiguration(),
+      "Should be able to create a configuration with default auth type"
+    )
+    XCTAssertEqual(button.loginConfiguration().authType,
+                   .rerequest)
+  }
 }
 
 private class TestButton: FBLoginButton {

@@ -73,16 +73,16 @@ main() {
 
     SDK_VERSION_FILES=(
       "Configurations/Version.xcconfig"
-      "FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKit.h"
+      "FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKitVersions.h"
       "Sources/FBSDKCoreKit_Basics/FBSDKCrashHandler.m"
     )
 
     SDK_GRAPH_API_VERSION_FILES=(
-      "FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKit.h"
+      "FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKitVersions.h"
       "FBSDKCoreKit/FBSDKCoreKitTests/FBSDKGraphRequestTests.m"
     )
 
-    SDK_MAIN_VERSION_FILE="FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKit.h"
+    SDK_MAIN_VERSION_FILE="FBSDKCoreKit/FBSDKCoreKit/FBSDKCoreKitVersions.h"
 
     SDK_FRAMEWORK_NAME="FacebookSDK"
 
@@ -363,16 +363,18 @@ lint_sdk() {
 
       set +e
 
-      if [ "$spec" != FBSDKCoreKit.podspec ]; then
-        dependent_spec="--include-podspecs=FBSDKCoreKit.podspec"
+      if [ "$spec" == FBSDKCoreKit.podspec ]; then
+        dependent_spec="--include-podspecs=FBSDKCoreKit_Basics.podspec"
+      else
+        dependent_spec="--include-podspecs=FBSDK{CoreKit,CoreKit_Basics}.podspec"
       fi
 
       if [ "$spec" == FBSDKTVOSKit.podspec ]; then
-        dependent_spec="--include-podspecs=FBSDK{Core,Share,Login}Kit.podspec"
+        dependent_spec="--include-podspecs=FBSDK{CoreKit,ShareKit,LoginKit,CoreKit_Basics}.podspec"
       fi
 
       if [ "$spec" == FBSDKGamingServicesKit.podspec ]; then
-        dependent_spec="--include-podspecs=FBSDK{Core,Share}Kit.podspec"
+        dependent_spec="--include-podspecs=FBSDK{CoreKit,ShareKit,CoreKit_Basics}.podspec"
       fi
 
       echo ""
@@ -641,7 +643,7 @@ verify_spm_headers() {
 
       mkdir -p include
 
-      headers=$(find . -name "*.h" -type f -not -path "./include/*" -not -path "**/Internal/*" -not -path "**/Basics/*")
+      headers=$(find . -name "*.h" -type f -not -path "./include/*" -not -path "**/Internal/*")
       echo "$(basename ${headers} )" | sort >| headers.txt
 
       cat headers.txt

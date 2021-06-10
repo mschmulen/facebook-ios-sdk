@@ -29,11 +29,12 @@ struct SwizzleEvidence: Equatable {
   }
 
   static func == (lhs: SwizzleEvidence, rhs: SwizzleEvidence) -> Bool {
-    return lhs.selector == rhs.selector && lhs.class == rhs.class
+    lhs.selector == rhs.selector && lhs.class == rhs.class
   }
 }
 
-class TestSwizzler: Swizzling {
+@objcMembers
+class TestSwizzler: NSObject, Swizzling {
   static var evidence = [SwizzleEvidence]()
 
   static func swizzleSelector(

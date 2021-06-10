@@ -19,7 +19,7 @@
 import XCTest
 
 // swiftlint:disable type_body_length
-class FBSDKBridgeAPIProtocolWebV2Tests: FBSDKTestCase {
+class FBSDKBridgeAPIProtocolWebV2Tests: XCTestCase {
 
   enum Keys {
     static let actionID = "action_id"
@@ -377,6 +377,6 @@ class FBSDKBridgeAPIProtocolWebV2Tests: FBSDKTestCase {
   }
 
   func queryItems(from url: URL) -> [URLQueryItem] {
-    return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+    URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
   }
 }

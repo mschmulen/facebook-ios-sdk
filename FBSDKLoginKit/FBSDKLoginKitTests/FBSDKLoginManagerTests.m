@@ -21,6 +21,7 @@
 #import <XCTest/XCTest.h>
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
+#import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
 #ifdef BUCK
  #import <FBSDKLoginKit+Internal/FBSDKLoginManager+Internal.h>
@@ -121,6 +122,10 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 - (void)setUp
 {
   [super setUp];
+
+  [FBSDKApplicationDelegate.sharedInstance application:UIApplication.sharedApplication
+                         didFinishLaunchingWithOptions:@{}];
+
   _mockNSBundle = [FBSDKLoginUtilityTests mainBundleMock];
   [FBSDKSettings setAppID:kFakeAppID];
   [FBSDKAuthenticationToken setCurrentAuthenticationToken:nil];
@@ -152,11 +157,18 @@ static NSString *const kFakeJTI = @"a jti is just any string";
     @"jti" : kFakeJTI,
     @"sub" : @"1234",
     @"name" : @"Test User",
+    @"given_name" : @"Test",
+    @"middle_name" : @"Middle",
+    @"family_name" : @"User",
     @"email" : @"email@email.com",
     @"picture" : @"https://www.facebook.com/some_picture",
     @"user_friends" : @[@"123", @"456"],
     @"user_birthday" : @"01/01/1990",
     @"user_age_range" : @{@"min" : @((long)21)},
+    @"user_hometown" : @{@"id" : @"112724962075996", @"name" : @"Martinez, California"},
+    @"user_location" : @{@"id" : @"110843418940484", @"name" : @"Seattle, Washington"},
+    @"user_gender" : @"male",
+    @"user_link" : @"https://www.facebook.com",
   };
 
   _header = @{
@@ -419,7 +431,11 @@ static NSString *const kFakeJTI = @"a jti is just any string";
     @"email",
     @"user_friends",
     @"user_birthday",
-    @"user_age_range"
+    @"user_age_range",
+    @"user_hometown",
+    @"user_location",
+    @"user_gender",
+    @"user_link"
   ];
   NSURL *url = [self authorizeURLWithFragment:[NSString stringWithFormat:@"granted_scopes=%@&id_token=%@", [permissions componentsJoinedByString:@","], tokenString] challenge:kFakeChallenge];
 
@@ -546,6 +562,8 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 
 - (void)testLoginManagerRetainsItselfForLoginMethod
 {
+  [FBSDKApplicationDelegate.sharedInstance application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+
   // Mock some methods to force an error callback.
   [[[_mockInternalUtility stub] andReturnValue:@NO] isFacebookAppInstalled];
   NSError *URLError = [[NSError alloc] initWithDomain:FBSDKErrorDomain code:0 userInfo:nil];
@@ -649,6 +667,7 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   XCTAssertNil(params[@"tp"], "Regular login should not send a tracking parameter");
   NSDictionary *state = [FBSDKBasicUtility objectForJSONString:params[@"state"] error:nil];
   XCTAssertEqualObjects(state[@"3_method"], @"sfvc_auth");
+  XCTAssertEqual(params[@"auth_type"], FBSDKLoginAuthTypeRerequest);
 }
 
 - (void)testLoginTrackingLimitedLoginParams
@@ -669,6 +688,7 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   XCTAssertEqualObjects(params[@"tp"], @"ios_14_do_not_track");
   NSDictionary *state = [FBSDKBasicUtility objectForJSONString:params[@"state"] error:nil];
   XCTAssertEqualObjects(state[@"3_method"], @"browser_auth");
+  XCTAssertEqual(params[@"auth_type"], FBSDKLoginAuthTypeRerequest);
 }
 
 - (void)testLoginParamsWithNilConfiguration
@@ -685,6 +705,50 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 
   XCTAssertNil(params);
   XCTAssert(wasCalled);
+}
+
+- (void)testLoginParamsWithNilAuthType
+{
+  FBSDKLoginConfiguration *config = [[FBSDKLoginConfiguration alloc]
+                                     initWithPermissions:@[@"public_profile", @"email"]
+                                     tracking:FBSDKLoginTrackingEnabled
+                                     messengerPageId:nil
+                                     authType:nil];
+  FBSDKLoginManagerLogger *logger = [[FBSDKLoginManagerLogger alloc] initWithLoggingToken:@"123"
+                                                                                 tracking:FBSDKLoginTrackingEnabled];
+
+  NSDictionary *params = [_mockLoginManager logInParametersWithConfiguration:config serverConfiguration:nil logger:logger authMethod:@"sfvc_auth"];
+
+  [self validateCommonLoginParameters:params];
+  XCTAssertEqualObjects(params[@"response_type"], @"id_token,token_or_nonce,signed_request,graph_domain");
+  XCTAssertEqualObjects(params[@"scope"], @"public_profile,email,openid");
+  XCTAssertNotNil(params[@"nonce"]);
+  XCTAssertNil(params[@"tp"], "Regular login should not send a tracking parameter");
+  NSDictionary *state = [FBSDKBasicUtility objectForJSONString:params[@"state"] error:nil];
+  XCTAssertEqualObjects(state[@"3_method"], @"sfvc_auth");
+  XCTAssertEqual(params[@"auth_type"], nil);
+}
+
+- (void)testLoginParamsWithExplicitlySetAuthType
+{
+  FBSDKLoginConfiguration *config = [[FBSDKLoginConfiguration alloc]
+                                     initWithPermissions:@[@"public_profile", @"email"]
+                                     tracking:FBSDKLoginTrackingEnabled
+                                     messengerPageId:nil
+                                     authType:FBSDKLoginAuthTypeReauthorize];
+  FBSDKLoginManagerLogger *logger = [[FBSDKLoginManagerLogger alloc] initWithLoggingToken:@"123"
+                                                                                 tracking:FBSDKLoginTrackingEnabled];
+
+  NSDictionary *params = [_mockLoginManager logInParametersWithConfiguration:config serverConfiguration:nil logger:logger authMethod:@"sfvc_auth"];
+
+  [self validateCommonLoginParameters:params];
+  XCTAssertEqualObjects(params[@"response_type"], @"id_token,token_or_nonce,signed_request,graph_domain");
+  XCTAssertEqualObjects(params[@"scope"], @"public_profile,email,openid");
+  XCTAssertNotNil(params[@"nonce"]);
+  XCTAssertNil(params[@"tp"], "Regular login should not send a tracking parameter");
+  NSDictionary *state = [FBSDKBasicUtility objectForJSONString:params[@"state"] error:nil];
+  XCTAssertEqualObjects(state[@"3_method"], @"sfvc_auth");
+  XCTAssertEqual(params[@"auth_type"], FBSDKLoginAuthTypeReauthorize);
 }
 
 - (void)testLogInParametersFromURL
@@ -995,7 +1059,6 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   XCTAssertEqualObjects(params[@"display"], @"touch");
   XCTAssertEqualObjects(params[@"sdk"], @"ios");
   XCTAssertEqualObjects(params[@"return_scopes"], @"true");
-  XCTAssertEqual(params[@"auth_type"], FBSDKLoginAuthTypeRerequest);
   XCTAssertEqualObjects(params[@"fbapp_pres"], @0);
   XCTAssertEqualObjects(params[@"ies"], [FBSDKSettings isAutoLogAppEventsEnabled] ? @1 : @0);
   XCTAssertNotNil(params[@"e2e"]);
@@ -1024,6 +1087,9 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 {
   XCTAssertNotNil(profile, @"user profile should be updated");
   XCTAssertEqualObjects(profile.name, _claims[@"name"], @"failed to parse user name");
+  XCTAssertEqualObjects(profile.firstName, _claims[@"given_name"], @"failed to parse user first name");
+  XCTAssertEqualObjects(profile.middleName, _claims[@"middle_name"], @"failed to parse user middle name");
+  XCTAssertEqualObjects(profile.lastName, _claims[@"family_name"], @"failed to parse user last name");
   XCTAssertEqualObjects(profile.userID, _claims[@"sub"], @"failed to parse userID");
   XCTAssertEqualObjects(profile.imageURL.absoluteString, _claims[@"picture"], @"failed to parse user profile picture");
   XCTAssertEqualObjects(profile.email, _claims[@"email"], @"failed to parse user email");
@@ -1039,6 +1105,22 @@ static NSString *const kFakeJTI = @"a jti is just any string";
     profile.ageRange,
     [FBSDKUserAgeRange ageRangeFromDictionary:_claims[@"user_age_range"]],
     @"failed to parse user age range"
+  );
+  XCTAssertEqualObjects(
+    profile.hometown,
+    [FBSDKLocation locationFromDictionary:_claims[@"user_hometown"]],
+    @"failed to parse user hometown"
+  );
+  XCTAssertEqualObjects(
+    profile.location,
+    [FBSDKLocation locationFromDictionary:_claims[@"user_location"]],
+    @"failed to parse user location"
+  );
+  XCTAssertEqualObjects(profile.gender, _claims[@"user_gender"], @"failed to parse user gender");
+  XCTAssertEqualObjects(
+    profile.linkURL,
+    [NSURL URLWithString:_claims[@"user_link"]],
+    @"failed to parse user link"
   );
 }
 

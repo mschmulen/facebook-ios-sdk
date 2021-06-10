@@ -24,3 +24,9 @@
 #else
  #import "FBSDKCoreKit+Internal.h"
 #endif
+
+#if defined FBSDK_SWIFT_PACKAGE
+@import FBSDKCoreKit_Basics;
+#else
+ #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
+#endif

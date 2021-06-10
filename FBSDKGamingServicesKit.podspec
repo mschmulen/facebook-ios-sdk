@@ -3,7 +3,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'FBSDKGamingServicesKit'
-  s.version      = '9.3.0'
+  s.version      = '11.0.0'
   s.summary      = 'Official Facebook SDK for iOS to access Facebook Gaming Services'
 
   s.description  = <<-DESC
@@ -29,10 +29,14 @@ Pod::Spec.new do |s|
 
   s.requires_arc = true
   s.pod_target_xcconfig = { 'DEFINES_MODULE': 'YES' }
-  s.prefix_header_contents = '#define FBSDKCOCOAPODS'
+  s.pod_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1',
+    'OTHER_SWIFT_FLAGS': '$(inherited) -Xcc -DFBSDKCOCOAPODS',
+  }
 
   s.source_files   = 'FBSDKGamingServicesKit/FBSDKGamingServicesKit/**/*.{h,m}'
   s.public_header_files = 'FBSDKGamingServicesKit/FBSDKGamingServicesKit/*.{h}'
-  s.dependency 'FBSDKCoreKit', "~> #{s.version}"
 
+  s.dependency 'FBSDKCoreKit_Basics', "~> #{s.version}"
+  s.dependency 'FBSDKCoreKit', "~> #{s.version}"
 end

@@ -30,6 +30,7 @@ class SampleAEMData { // swiftlint:disable:this convenience_type
       static let priority = "priority"
       static let events = "events"
       static let eventName = "event_name"
+      static let businessID = "advertiser_id"
   }
 
   enum Values {
@@ -107,4 +108,73 @@ class SampleAEMData { // swiftlint:disable:this convenience_type
       ],
     ]
   ]
+
+  static let validAdvertiserSingleEntryRule: AEMAdvertiserSingleEntryRule
+    = AEMAdvertiserSingleEntryRule(
+      with: AEMAdvertiserRuleOperator.FBSDKAEMAdvertiserRuleOperatorContains,
+      paramKey: "test",
+      linguisticCondition: "hello",
+      numericalCondition: NSNumber(10),
+      arrayCondition: ["abv"]
+    )
+
+  static let validAdvertiserMultiEntryRule: AEMAdvertiserMultiEntryRule
+    = AEMAdvertiserMultiEntryRule(
+      with: AEMAdvertiserRuleOperator.FBSDKAEMAdvertiserRuleOperatorAnd,
+      rules: [validAdvertiserSingleEntryRule]
+    )
+
+  static let validAdvertiserSingleEntryRuleJson1: [String: Any] = ["content": ["starts_with": "abc"]]
+
+  static let validAdvertiserSingleEntryRuleJson2: [String: Any] = ["value": ["lt": 10]]
+
+  static let validAdvertiserSingleEntryRuleJson3: [String: Any] = ["content": ["is_any": ["abc"]]]
+
+  static let advertiserSingleEntryRule1 = AEMAdvertiserSingleEntryRule(
+    with: AEMAdvertiserRuleOperator.FBSDKAEMAdvertiserRuleOperatorStartsWith,
+    paramKey: "content",
+    linguisticCondition: "abc",
+    numericalCondition: nil,
+    arrayCondition: nil
+  )
+
+  static let advertiserSingleEntryRule2 = AEMAdvertiserSingleEntryRule(
+    with: AEMAdvertiserRuleOperator.FBSDKAEMAdvertiserRuleOperatorLessThan,
+    paramKey: "value",
+    linguisticCondition: nil,
+    numericalCondition: NSNumber(value: 10),
+    arrayCondition: nil
+  )
+
+  static let advertiserSingleEntryRule3 = AEMAdvertiserSingleEntryRule(
+    with: AEMAdvertiserRuleOperator.FBSDKAEMAdvertiserRuleOperatorIsAny,
+    paramKey: "content",
+    linguisticCondition: nil,
+    numericalCondition: nil,
+    arrayCondition: ["abc"]
+  )
+
+  static let invocationWithAdvertiserID1 = AEMInvocation(
+    campaignID: "test_campaign_1234",
+    acsToken: "test_token_1234567",
+    acsSharedSecret: "test_shared_secret",
+    acsConfigID: "test_config_id_123",
+    businessID: "test_advertiserid_123"
+  )! // swiftlint:disable:this force_unwrapping
+
+  static let invocationWithAdvertiserID2 = AEMInvocation(
+    campaignID: "test_campaign_1235",
+    acsToken: "test_token_2345678",
+    acsSharedSecret: "test_shared_secret_124",
+    acsConfigID: "test_config_id_124",
+    businessID: "test_advertiserid_12346"
+  )! // swiftlint:disable:this force_unwrapping
+
+  static let invocationWithoutAdvertiserID = AEMInvocation(
+    campaignID: "test_campaign_4321",
+    acsToken: "test_token_7654",
+    acsSharedSecret: "test_shared_secret_123",
+    acsConfigID: "test_config_id_333",
+    businessID: nil
+  )! // swiftlint:disable:this force_unwrapping
 }

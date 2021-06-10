@@ -19,6 +19,7 @@
 #import <XCTest/XCTest.h>
 
 #import "FBSDKAppEvents.h"
+#import "FBSDKAppEventsConfiguration.h"
 #import "FBSDKAppEventsUtility.h"
 #import "FBSDKApplicationDelegate.h"
 #import "FBSDKGraphRequestConnection.h"
@@ -121,9 +122,6 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// Used for sharing a `UIApplication.sharedApplication` mock between tests
 @property (nullable, nonatomic, assign) id sharedApplicationMock;
 
-/// Used for sharing a `FBSDKLogger` class mock between tests
-@property (nullable, nonatomic, assign) id loggerClassMock;
-
 /// Used for stubbing any instance that conforms to the `UIViewControllerTransitionCoordinator` protocol
 @property (nullable, nonatomic, assign) id transitionCoordinatorMock;
 
@@ -139,14 +137,8 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// Used for sharing a `ASIdentifier` class mock between tests
 @property (nullable, nonatomic, assign) id asIdentifierManagerClassMock;
 
-/// Stubs `FBSDKSettings.appID` and return the provided value
-- (void)stubAppID:(nullable NSString *)appID;
-
 /// Stubs `FBSDKSettings.isAutoLogAppEventsEnabled` and return the provided value
 - (void)stubIsAutoLogAppEventsEnabled:(BOOL)isEnabled;
-
-/// Stubs `FBSDKGateKeeperManager.loadGateKeepers:` to avoid the side effect of a network fetch
-- (void)stubLoadingGateKeepers;
 
 /// Stubs `FBSDKServerConfigurationManager.cachedServerConfiguration` and returns the default server configuration.
 /// Use this when you don't care what the actual configuration is and want to avoid a network call.
@@ -163,12 +155,6 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// Stubs `FBSDKProfile.fetchCachedProfile`
 - (void)stubCachedProfileWith:(FBSDKProfile *__nullable)profile;
 
-/// Stubs `FBSDKSettings.graphAPIVersion` with the provided version string
-- (void)stubGraphAPIVersionWith:(NSString *)version;
-
-/// Stubs `FBSDKSettings.clientToken` with the provided token string
-- (void)stubClientTokenWith:(nullable NSString *)token;
-
 /// Stubs `FBSDKSettings.getAdvertisingTrackingStatus` with the provided value
 - (void)stubAdvertisingTrackingStatusWith:(FBSDKAdvertisingTrackingStatus)trackingStatus;
 
@@ -178,17 +164,11 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// Stubs `FBSDKAppEventsUtility.shouldDropAppEvent` with the provided value
 - (void)stubAppEventsUtilityShouldDropAppEventWith:(BOOL)shouldDropEvent;
 
-/// Stubs `FBSDKSettings.shouldLimitEventAndDataUsage` with the provided value
-- (void)stubSettingsShouldLimitEventAndDataUsageWith:(BOOL)shouldLimit;
-
 /// Stubs `FBSDKAppEventsUtility.shared.advertiserID` with the provided value
 - (void)stubAppEventsUtilityAdvertiserIDWith:(nullable NSString *)identifier;
 
 /// Stubs `FBSDKAppEventsUtility.tokenStringToUseFor:` and returns the provided string
 - (void)stubAppEventsUtilityTokenStringToUseForTokenWith:(NSString *)tokenString;
-
-/// Stubs `FBSDKGraphRequest.startWithCompletionHandler:` and returns the provided result, error and connection
-- (void)stubGraphRequestWithResult:(id)result error:(nullable NSError *)error connection:(nullable FBSDKGraphRequestConnection *)connection;
 
 /// Stubs `FBSDKGraphRequestPiggybackManager._lastRefreshTry` and returns the provided `NSDate`
 - (void)stubGraphRequestPiggybackManagerLastRefreshTryWith:(NSDate *)date;
@@ -200,12 +180,6 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// from hitting the network while proper mocks are being written.
 - (void)stubAllocatingGraphRequestConnection;
 
-/// Stubs `FBSDKSettings.isDataProcessingRestricted` and returns the provided value
-- (void)stubIsDataProcessingRestricted:(BOOL)isRestricted;
-
-/// Stubs `FBSDKSettings.facebookDomainPart` with the provided value
-- (void)stubFacebookDomainPartWith:(NSString *)domainPart;
-
 /// Stubs `UIApplication.sharedApplication`'s `openURL:` method and returns the provided value
 - (void)stubOpenURLWith:(BOOL)openURL;
 
@@ -216,12 +190,6 @@ Also, to get a better understanding of mocking, please read the documentation at
 /// - completionSuccess: The value to pass for the success parameter of the completion handler
 - (void)stubOpenUrlOptionsCompletionHandlerWithPerformCompletion:(BOOL)performCompletion
                                                completionSuccess:(BOOL)completionSuccess;
-
-/// Stubs `FBSDKSettings.appURLSchemeSuffix` and return the provided value
-- (void)stubAppUrlSchemeSuffixWith:(nullable NSString *)suffix;
-
-/// Stubs `FBSDKSettings.userAgentSuffix` and returns the provided value
-- (void)stubUserAgentSuffixWith:(nullable NSString *)suffix;
 
 /// Stubs `FBSDKInternalUtility`'s `appURLScheme` property to return the provided scheme
 - (void)stubAppUrlSchemeWith:(nullable NSString *)scheme;

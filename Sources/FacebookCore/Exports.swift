@@ -23,6 +23,6 @@
 // See: https://forums.swift.org/t/16648/2 for more details
 //
 
-#if FBSDK_SWIFT_PACKAGE
+#if !BUCK
 @_exported import LegacyCoreKit
 #endif

@@ -27,16 +27,20 @@
 #import "FakeLoginManager.h"
 
 @interface FBSDKBridgeAPI (Testing)
+@property (nonnull, nonatomic) FBSDKLogger *logger;
 - (void)_openURLWithSafariViewController:(NSURL *)url
                                   sender:(id<FBSDKURLOpening>)sender
                       fromViewController:(UIViewController *)fromViewController
                                  handler:(FBSDKSuccessBlock)handler
                            dylibResolver:(id<FBSDKDynamicFrameworkResolving>)dylibResolver;
+- (void)openURLWithAuthenticationSession:(NSURL *)url;
+- (void)setSessionCompletionHandlerFromHandler:(void (^)(BOOL, NSError *))handler;
 @end
 
 @interface FBSDKBridgeAPIOpenUrlWithSafariTests : FBSDKTestCase
 
 @property (nonatomic) FBSDKBridgeAPI *api;
+@property (nonatomic) TestLogger *logger;
 @property (nonatomic) id partialMock;
 @property (nonatomic, readonly) NSURL *sampleUrl;
 @property (nonatomic) FBSDKLoginManager *urlOpener;
@@ -51,6 +55,8 @@
 
   [FBSDKLoginManager resetTestEvidence];
   _api = [[FBSDKBridgeAPI alloc] initWithProcessInfo:[TestProcessInfo new]];
+  _logger = [[TestLogger alloc] initWithLoggingBehavior:FBSDKLoggingBehaviorDeveloperErrors];
+  _api.logger = _logger;
   _partialMock = OCMPartialMock(self.api);
   _urlOpener = [FBSDKLoginManager new];
 
@@ -66,6 +72,7 @@
 
   [_partialMock stopMocking];
   _partialMock = nil;
+  [TestLogger reset];
 
   [super tearDown];
 }
@@ -157,10 +164,7 @@
                          fromViewController:nil
                                     handler:self.uninvokedSuccessBlock];
 
-  OCMVerify(
-    [self.loggerClassMock singleShotLogEntry:FBSDKLoggingBehaviorDeveloperErrors
-                                    logEntry:@"There are no valid ViewController to present SafariViewController with"]
-  );
+  XCTAssertEqualObjects(_logger.capturedContents, @"There are no valid ViewController to present SafariViewController with");
   [self assertExpectingBackgroundAndPendingUrlOpener];
 }
 

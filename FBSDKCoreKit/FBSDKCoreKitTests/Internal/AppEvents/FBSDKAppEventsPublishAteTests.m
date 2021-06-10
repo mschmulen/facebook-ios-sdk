@@ -21,44 +21,20 @@
 
 @import TestTools;
 
+#import "FBSDKAppEvents+AppEventsConfiguring.h"
 #import "FBSDKAppEventsAtePublisher.h"
 #import "FBSDKCoreKitTests-Swift.h"
-#import "FBSDKTestCase.h"
 #import "UserDefaultsSpy.h"
 
-// TODO: move to swift
-@interface FakeAtePublisher : NSObject <FBSDKAtePublishing>
-@property (nonatomic, assign) BOOL publishAteWasCalled;
-@end
-
-@implementation FakeAtePublisher
-
-- (instancetype)init
-{
-  if ((self = [super init])) {
-    _publishAteWasCalled = NO;
-  }
-  return self;
-}
-
-- (void)publishATE
-{
-  self.publishAteWasCalled = YES;
-}
-
-@end
-
 @interface FBSDKAppEvents (Testing)
-@property (nonatomic, strong) id<FBSDKAtePublishing> atePublisher;
+@property (nullable, nonatomic) id<FBSDKAtePublishing> atePublisher;
 - (instancetype)initWithFlushBehavior:(FBSDKAppEventsFlushBehavior)flushBehavior
-                 flushPeriodInSeconds:(int)flushPeriodInSeconds
-                               userID:(NSString *)userID
-                         atePublisher:(id<FBSDKAtePublishing>)atePublisher;
+                 flushPeriodInSeconds:(int)flushPeriodInSeconds;
 - (void)publishATE;
 + (void)setSettings:(id<FBSDKSettings>)settings;
 @end
 
-@interface FBSDKAppEventsPublishAteTests : FBSDKTestCase
+@interface FBSDKAppEventsPublishAteTests : XCTestCase
 @property (nonatomic, strong) id<FBSDKSettings> settings;
 @end
 
@@ -68,7 +44,6 @@
 {
   [super setUp];
 
-  [self stubAllocatingGraphRequestConnection];
   _settings = [TestSettings new];
   [FBSDKAppEvents setSettings:_settings];
 }
@@ -79,44 +54,57 @@
 
   FBSDKAppEvents *appEvents = (FBSDKAppEvents *)[(NSObject *)[FBSDKAppEvents alloc] init];
 
-  FBSDKAppEventsAtePublisher *publisher = appEvents.atePublisher;
-
-  XCTAssertNotNil(publisher, "App events should be provided with an ATE publisher on initialization");
-  XCTAssertEqualObjects(
-    publisher.appIdentifier,
-    self.name,
-    "The ATE publisher should be created with the current app identifier"
+  XCTAssertNil(
+    appEvents.atePublisher,
+    "App events should be provided with an ATE publisher on initialization"
   );
 }
 
 - (void)testPublishingAteWithoutPublisher
 {
-  FBSDKAppEvents *appEvents = [[FBSDKAppEvents alloc] initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
-                                                       flushPeriodInSeconds:0
-                                                                     userID:@"1"
-                                                               atePublisher:nil];
+  FBSDKAppEvents *appEvents = [[FBSDKAppEvents alloc]
+                               initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
+                               flushPeriodInSeconds:0];
   // checking that there is no crash
   [appEvents publishATE];
 }
 
-- (void)testPublishingAteUsesPublisherOnlyOnce
+- (void)testPublishingAteAgainAfterSettingAppID
 {
-  FakeAtePublisher *publisher = [FakeAtePublisher new];
-  FBSDKAppEvents *appEvents = [[FBSDKAppEvents alloc] initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
-                                                       flushPeriodInSeconds:0
-                                                                     userID:@"1"
-                                                               atePublisher:publisher];
-  [appEvents publishATE];
-
-  XCTAssertTrue(publisher.publishAteWasCalled, "App events should use the provided ATE publisher");
-
-  // Reset the spy
-  publisher.publishAteWasCalled = NO;
+  TestAtePublisher *publisher = [TestAtePublisher new];
+  TestAtePublisherFactory *factory = [TestAtePublisherFactory new];
+  factory.stubbedPublisher = publisher;
+  FBSDKAppEvents *appEvents = [[FBSDKAppEvents alloc]
+                               initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
+                               flushPeriodInSeconds:0];
 
   [appEvents publishATE];
   XCTAssertFalse(
     publisher.publishAteWasCalled,
-    "Should not invoke the ate publisher more than once"
+    "App events Should not invoke the ATE publisher when there is not App ID"
+  );
+
+  _settings.appID = self.name;
+  [appEvents configureWithGateKeeperManager:TestGateKeeperManager.class
+             appEventsConfigurationProvider:TestAppEventsConfigurationProvider.class
+                serverConfigurationProvider:TestServerConfigurationProvider.class
+                       graphRequestProvider:[TestGraphRequestFactory new]
+                             featureChecker:[TestFeatureManager new]
+                                      store:[UserDefaultsSpy new]
+                                     logger:TestLogger.class
+                                   settings:_settings
+                            paymentObserver:[TestPaymentObserver new]
+                          timeSpentRecorder:[TestTimeSpentRecorder new]
+                        appEventsStateStore:[TestAppEventsStateStore new]
+        eventDeactivationParameterProcessor:[TestAppEventsParameterProcessor new]
+    restrictiveDataFilterParameterProcessor:[TestAppEventsParameterProcessor new]
+                        atePublisherFactory:factory
+                                   swizzler:TestSwizzler.class];
+
+  [appEvents publishATE];
+  XCTAssertTrue(
+    publisher.publishAteWasCalled,
+    "App events should use the ATE publisher created by the configure method"
   );
 }
 

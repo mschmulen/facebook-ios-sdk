@@ -16,7 +16,6 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <OCMock/OCMock.h>
 #import <XCTest/XCTest.h>
 
 #import "FBSDKCoreKit+Internal.h"
@@ -463,7 +462,7 @@ typedef FBSDKServerConfigurationFixtures Fixtures;
 
 - (void)testCreatingWithEventBindings
 {
-  NSArray *bindings = @[[FBSDKEventBinding new]];
+  NSArray *bindings = @[[SampleEventBinding createValidWithName:self.name]];
   config = [Fixtures configWithDictionary:@{@"eventBindings" : bindings}];
 
   XCTAssertEqualObjects(

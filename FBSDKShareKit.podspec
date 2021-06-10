@@ -3,7 +3,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'FBSDKShareKit'
-  s.version      = '9.3.0'
+  s.version      = '11.0.0'
   s.summary      = 'Official Facebook SDK for iOS to access Facebook Platform Sharing Features'
 
   s.description  = <<-DESC
@@ -38,9 +38,13 @@ Pod::Spec.new do |s|
   s.swift_version = '5.0'
 
   s.header_dir = 'FBSDKShareKit'
-  s.prefix_header_contents = '#define FBSDKCOCOAPODS'
+  s.pod_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1',
+    'OTHER_SWIFT_FLAGS': '$(inherited) -Xcc -DFBSDKCOCOAPODS',
+  }
 
   s.subspec 'Share' do |ss|
+    ss.dependency 'FBSDKCoreKit_Basics', "~> #{s.version}"
     ss.dependency 'FBSDKCoreKit', "~> #{s.version}"
 
     ss.exclude_files = 'FBSDKShareKit/FBSDKShareKit/include/**/*',

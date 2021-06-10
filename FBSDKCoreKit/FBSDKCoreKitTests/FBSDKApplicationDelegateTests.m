@@ -16,18 +16,28 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <OCMock/OCMock.h>
 #import <XCTest/XCTest.h>
 
 @import TestTools;
 
 #import "FBSDKAppEvents.h"
+#import "FBSDKApplicationDelegate+Internal.h"
+#import "FBSDKApplicationObserving.h"
+#import "FBSDKAuthenticationToken+Internal.h"
+#import "FBSDKConversionValueUpdating.h"
 #import "FBSDKCoreKit+Internal.h"
-#import "FBSDKCoreKitTestUtility.h"
 #import "FBSDKCoreKitTests-Swift.h"
+#import "FBSDKCrashShield+Internal.h"
+#import "FBSDKEventDeactivationManager+AppEventsParameterProcessing.h"
+#import "FBSDKFeatureExtractor.h"
+#import "FBSDKFeatureExtractor+Internal.h"
+#import "FBSDKFeatureExtractor+Testing.h"
+#import "FBSDKFeatureManager+FeatureChecking.h"
 #import "FBSDKPaymentObserver.h"
+#import "FBSDKRestrictiveDataFilterManager+AppEventsParameterProcessing.h"
 #import "FBSDKServerConfigurationFixtures.h"
 #import "FBSDKTestCase.h"
+#import "FBSDKTimeSpentData.h"
 
 @interface FBSDKGraphRequestConnection (AppDelegateTesting)
 + (BOOL)canMakeRequests;
@@ -42,9 +52,7 @@
 
 - (BOOL)isAppLaunched;
 - (void)setIsAppLaunched:(BOOL)isLaunched;
-- (NSHashTable<id<FBSDKApplicationObserving>> *)applicationObservers;
 - (void)resetApplicationObserverCache;
-- (void)_logSDKInitialize;
 - (void)applicationDidBecomeActive:(NSNotification *)notification;
 - (void)applicationWillResignActive:(NSNotification *)notification;
 - (void)setApplicationState:(UIApplicationState)state;
@@ -62,6 +70,7 @@
 @interface FBSDKSKAdNetworkReporter (Testing)
 + (id<FBSDKGraphRequestProviding>)requestProvider;
 + (id<FBSDKDataPersisting>)store;
++ (Class<FBSDKConversionValueUpdating>)conversionValueUpdatable;
 @end
 
 @interface FBSDKAppLinkUtility (Testing)
@@ -73,137 +82,91 @@
 + (id<FBSDKDataPersisting>)store;
 @end
 
-@interface FBSDKApplicationDelegateTests : FBSDKTestCase
-{
-  FBSDKApplicationDelegate *_delegate;
-  FBSDKProfile *_profile;
-  id _partialDelegateMock;
-}
+@interface FBSDKCrashShield (Testing)
++ (id<FBSDKSettings>)settings;
++ (id<FBSDKGraphRequestProviding>)requestProvider;
++ (id<FBSDKFeatureChecking>)featureChecking;
+@end
+
+@interface FBSDKRestrictiveDataFilterManager (Testing)
+- (Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider;
 @end
 
 @interface FBSDKAppEvents (ApplicationDelegateTesting)
-+ (UIApplicationState)applicationState;
-+ (BOOL)canLogEvents;
+
+@property (nonatomic, readonly) id<FBSDKAtePublishing> atePublisher;
+
 + (Class<FBSDKGateKeeperManaging>)gateKeeperManager;
 + (Class<FBSDKAppEventsConfigurationProviding>)appEventsConfigurationProvider;
 + (Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider;
 + (id<FBSDKGraphRequestProviding>)requestProvider;
-+ (Class<FBSDKFeatureChecking>)featureChecker;
++ (id<FBSDKFeatureChecking>)featureChecker;
 + (id<FBSDKDataPersisting>)store;
-+ (id<FBSDKLogging>)logger;
++ (Class<FBSDKLogging>)logger;
 + (id<FBSDKSettings>)settings;
-+ (id<FBSDKEventProcessing>)eventProcessor;
-+ (Class<FBSDKPaymentObserving>)paymentObserver;
++ (id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider>)onDeviceMLModelManager;
++ (id<FBSDKPaymentObserving>)paymentObserver;
++ (id<FBSDKTimeSpentRecording>)timeSpentRecorder;
++ (id<FBSDKAppEventsStatePersisting>)appEventsStateStore;
++ (id<FBSDKMetadataIndexing>)metadataIndexer;
++ (id<FBSDKAppEventsParameterProcessing>)eventDeactivationParameterProcessor;
++ (id<FBSDKAppEventsParameterProcessing>)restrictiveDataFilterParameterProcessor;
+@end
+
+@interface FBSDKApplicationDelegateTests : XCTestCase
+
+@property (nonatomic) FBSDKApplicationDelegate *delegate;
+@property (nonatomic) TestFeatureManager *featureChecker;
+@property (nonatomic) TestAppEvents *appEvents;
+@property (nonatomic) UserDefaultsSpy *store;
+@property (nonatomic) TestSettings *settings;
+
 @end
 
 @implementation FBSDKApplicationDelegateTests
+
+static NSString *bitmaskKey = @"com.facebook.sdk.kits.bitmask";
 
 - (void)setUp
 {
   [super setUp];
 
-  [TestAccessTokenWallet reset];
-  [TestSettings reset];
-  [TestGateKeeperManager reset];
+  [self.class resetTestData];
 
-  _delegate = [[FBSDKApplicationDelegate alloc] initWithNotificationObserver:[TestNotificationCenter new]
-                                                                 tokenWallet:TestAccessTokenWallet.class
-                                                                    settings:TestSettings.class];
-  _delegate.isAppLaunched = NO;
+  self.appEvents = [TestAppEvents new];
+  self.settings = [TestSettings new];
+  self.featureChecker = [TestFeatureManager new];
+  self.delegate = [[FBSDKApplicationDelegate alloc] initWithNotificationObserver:[TestNotificationCenter new]
+                                                                     tokenWallet:TestAccessTokenWallet.class
+                                                                        settings:self.settings
+                                                                  featureChecker:self.featureChecker
+                                                                       appEvents:self.appEvents
+                                                     serverConfigurationProvider:TestServerConfigurationProvider.class
+                                                                           store:self.store
+                                                       authenticationTokenWallet:TestAuthenticationTokenWallet.class
+                                                                 profileProvider:TestProfileProvider.class];
+  self.delegate.isAppLaunched = NO;
 
-  _profile = [[FBSDKProfile alloc] initWithUserID:self.name
-                                        firstName:nil
-                                       middleName:nil
-                                         lastName:nil
-                                             name:nil
-                                          linkURL:nil
-                                      refreshDate:nil];
-
-  // Avoid actually calling log initialize b/c of the side effects.
-  _partialDelegateMock = OCMPartialMock(_delegate);
-  OCMStub([_partialDelegateMock _logSDKInitialize]);
-
-  [_delegate resetApplicationObserverCache];
-
-  [self stubLoadingAdNetworkReporterConfiguration];
-  [self stubServerConfigurationFetchingWithConfiguration:FBSDKServerConfigurationFixtures.defaultConfig error:nil];
+  [self.delegate resetApplicationObserverCache];
 }
 
 - (void)tearDown
 {
   [super tearDown];
 
-  _delegate = nil;
-  _profile = nil;
+  self.delegate = nil;
 
-  [_partialDelegateMock stopMocking];
-  _partialDelegateMock = nil;
+  [self.class resetTestData];
+}
 
++ (void)resetTestData
+{
   [TestAccessTokenWallet reset];
+  [TestAuthenticationTokenWallet reset];
+  [TestGateKeeperManager reset];
+  [TestProfileProvider reset];
+  [TestServerConfigurationProvider reset];
   [TestSettings reset];
-}
-
-// MARK: - Observers
-
-- (void)testDefaultObservers
-{
-  // Note: in reality this will have one observer from the BridgeAPI load method.
-  // this needs to be re-architected to avoid this.
-  XCTAssertEqual(
-    _delegate.applicationObservers.count,
-    0,
-    "Should have no observers by default"
-  );
-}
-
-- (void)testAddingNewObserver
-{
-  TestApplicationDelegateObserver *observer = [TestApplicationDelegateObserver new];
-  [_delegate addObserver:observer];
-
-  XCTAssertEqual(
-    [_delegate applicationObservers].count,
-    1,
-    "Should be able to add a single observer"
-  );
-}
-
-- (void)testAddingDuplicateObservers
-{
-  TestApplicationDelegateObserver *observer = [TestApplicationDelegateObserver new];
-  [_delegate addObserver:observer];
-  [_delegate addObserver:observer];
-
-  XCTAssertEqual(
-    [_delegate applicationObservers].count,
-    1,
-    "Should only add one instance of a given observer"
-  );
-}
-
-- (void)testRemovingObserver
-{
-  TestApplicationDelegateObserver *observer = [TestApplicationDelegateObserver new];
-  [_delegate addObserver:observer];
-  [_delegate removeObserver:observer];
-
-  XCTAssertEqual(
-    _delegate.applicationObservers.count,
-    0,
-    "Should be able to remove observers that are present in the stored list"
-  );
-}
-
-- (void)testRemovingMissingObserver
-{
-  TestApplicationDelegateObserver *observer = [TestApplicationDelegateObserver new];
-  [_delegate removeObserver:observer];
-
-  XCTAssertEqual(
-    _delegate.applicationObservers.count,
-    0,
-    "Should not be able to remove absent observers"
-  );
 }
 
 // MARK: - Lifecycle Methods
@@ -213,7 +176,7 @@
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   [FBSDKGraphRequestConnection resetCanMakeRequests];
 
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   XCTAssertTrue(
     [FBSDKGraphRequestConnection canMakeRequests],
@@ -226,65 +189,97 @@
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   [FBSDKAppEvents reset];
 
-  [_delegate initializeSDKWithLaunchOptions:@{}];
-
-  XCTAssertTrue(
-    [FBSDKAppEvents canLogEvents],
-    "Initializing the SDK should enable event logging"
-  );
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   XCTAssertEqualObjects(
-    FBSDKAppEvents.gateKeeperManager,
+    self.appEvents.capturedConfigureGateKeeperManager,
     FBSDKGateKeeperManager.class,
     "Initializing the SDK should set gate keeper manager for event logging"
   );
-  NSObject *requestProvider = (NSObject *) FBSDKAppEvents.requestProvider;
+  NSObject *requestProvider = (NSObject *) self.appEvents.capturedConfigureGraphRequestProvider;
   XCTAssertEqualObjects(
     requestProvider.class,
     FBSDKGraphRequestFactory.class,
     "Initializing the SDK should set graph request factory for event logging"
   );
-
   XCTAssertEqualObjects(
-    FBSDKAppEvents.appEventsConfigurationProvider,
+    self.appEvents.capturedConfigureAppEventsConfigurationProvider,
     FBSDKAppEventsConfigurationManager.class,
     "Initializing the SDK should set AppEvents configuration provider for event logging"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.serverConfigurationProvider,
+    self.appEvents.capturedConfigureServerConfigurationProvider,
     FBSDKServerConfigurationManager.class,
     "Initializing the SDK should set server configuration provider for event logging"
   );
-  NSObject *store = (NSObject *)FBSDKAppEvents.store;
+  NSObject *store = (NSObject *)self.appEvents.capturedConfigureStore;
   XCTAssertEqualObjects(
     store,
     NSUserDefaults.standardUserDefaults,
     "Should be configured with the expected concrete data store"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.featureChecker,
-    FBSDKFeatureManager.shared,
+    self.appEvents.capturedConfigureFeatureChecker,
+    self.delegate.featureChecker,
     "Initializing the SDK should set feature checker for event logging"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.logger,
+    self.appEvents.capturedConfigureLogger,
     FBSDKLogger.class,
     "Initializing the SDK should set concrete logger for event logging"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.settings,
+    self.appEvents.capturedConfigureSettings,
     FBSDKSettings.sharedSettings,
     "Initializing the SDK should set concrete settings for event logging"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.eventProcessor,
-    FBSDKModelManager.shared,
-    "Initializing the SDK should set concrete event processor for event logging"
+    self.appEvents.capturedConfigurePaymentObserver,
+    FBSDKPaymentObserver.shared,
+    "Initializing the SDK should set concrete payment observer for event logging"
   );
   XCTAssertEqualObjects(
-    FBSDKAppEvents.paymentObserver,
-    FBSDKPaymentObserver.class,
-    "Initializing the SDK should set concrete payment observer for event logging"
+    self.appEvents.capturedConfigureTimeSpentRecorder,
+    FBSDKTimeSpentData.shared,
+    "Initializing the SDK should set concrete time spent recorder for event logging"
+  );
+  XCTAssertEqualObjects(
+    self.appEvents.capturedConfigureAppEventsStateStore,
+    FBSDKAppEventsStateManager.shared,
+    "Initializing the SDK should set concrete state store for event logging"
+  );
+  XCTAssertEqualObjects(
+    self.appEvents.capturedConfigureEventDeactivationParameterProcessor,
+    FBSDKEventDeactivationManager.shared,
+    "Initializing the SDK should set concrete event deactivation parameter processor for event logging"
+  );
+  XCTAssertEqualObjects(
+    self.appEvents.capturedConfigureRestrictiveDataFilterParameterProcessor,
+    FBSDKRestrictiveDataFilterManager.shared,
+    "Initializing the SDK should set concrete restrictive data filter parameter processor for event logging"
+  );
+  XCTAssertTrue(
+    [(NSObject *)self.appEvents.capturedConfigureAtePublisherFactory isKindOfClass:FBSDKAtePublisherFactory.class],
+    "Initializing the SDK should set concrete ate publisher factory for event logging"
+  );
+  XCTAssertEqualObjects(
+    self.appEvents.capturedConfigureSwizzler,
+    FBSDKSwizzler.class,
+    "Initializing the SDK should set concrete swizzler for event logging"
+  );
+}
+
+- (void)testConfiguringNonTVAppEventsDependencies
+{
+  XCTAssertEqualObjects(
+    FBSDKAppEvents.onDeviceMLModelManager,
+    FBSDKModelManager.shared,
+    "Initializing the SDK should set concrete on device model manager for event logging"
+  );
+  XCTAssertEqualObjects(
+    FBSDKAppEvents.metadataIndexer,
+    FBSDKMetadataIndexer.shared,
+    "Initializing the SDK should set concrete metadata indexer for event logging"
   );
 }
 
@@ -293,7 +288,7 @@
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   [FBSDKGateKeeperManager reset];
 
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   NSObject *requestProvider = (NSObject *)FBSDKGateKeeperManager.requestProvider;
   NSObject *connectionProvider = (NSObject *)FBSDKGateKeeperManager.connectionProvider;
@@ -329,7 +324,7 @@
 - (void)testConfiguringCodelessIndexer
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *requestProvider = (NSObject *)[FBSDKCodelessIndexer requestProvider];
   NSObject *serverConfigurationProvider = (NSObject *)[FBSDKCodelessIndexer serverConfigurationProvider];
   NSObject *store = (NSObject *)[FBSDKCodelessIndexer store];
@@ -374,10 +369,46 @@
   );
 }
 
+- (void)testConfiguringCrashShield
+{
+  [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
+  NSObject *settings = (NSObject *)[FBSDKCrashShield settings];
+  NSObject *requestProvider = (NSObject *)[FBSDKCrashShield requestProvider];
+  NSObject *featureChecking = (NSObject *)[FBSDKCrashShield featureChecking];
+  XCTAssertEqualObjects(
+    settings.class,
+    FBSDKSettings.class,
+    "Should be configured with the expected settings"
+  );
+  XCTAssertEqualObjects(
+    requestProvider.class,
+    FBSDKGraphRequestFactory.class,
+    "Should be configured with the expected concrete graph request provider"
+  );
+  XCTAssertEqualObjects(
+    featureChecking.class,
+    FBSDKFeatureManager.class,
+    "Should be configured with the expected concrete Feature manager"
+  );
+}
+
+- (void)testConfiguringRestrictiveDataFilterManager
+{
+  [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
+
+  XCTAssertEqualObjects(
+    FBSDKRestrictiveDataFilterManager.shared.serverConfigurationProvider,
+    FBSDKServerConfigurationManager.class,
+    "Should be configured with the expected concrete server configuration provider"
+  );
+}
+
 - (void)testInitializingSdkConfiguresAppLinkUtility
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *requestProvider = (NSObject *)[FBSDKAppLinkUtility requestProvider];
   NSObject *infoDictionaryProvider = (NSObject *)[FBSDKAppLinkUtility infoDictionaryProvider];
   XCTAssertEqualObjects(
@@ -395,9 +426,10 @@
 - (void)testConfiguringFBSDKSKAdNetworkReporter
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *requestProvider = (NSObject *)[FBSDKSKAdNetworkReporter requestProvider];
   NSObject *store = (NSObject *)[FBSDKSKAdNetworkReporter store];
+  NSObject *conversionValueUpdatable = (NSObject *)[FBSDKSKAdNetworkReporter conversionValueUpdatable];
   XCTAssertEqualObjects(
     requestProvider.class,
     FBSDKGraphRequestFactory.class,
@@ -408,13 +440,20 @@
     NSUserDefaults.standardUserDefaults,
     "Should be configured with the standard user defaults"
   );
+  if (@available(iOS 11.3, *)) {
+    XCTAssertEqualObjects(
+      conversionValueUpdatable,
+      SKAdNetwork.class,
+      "Should be configured with the default Conversion Value Updating Class"
+    );
+  }
 }
 
 - (void)testInitializingSdkConfiguresAccessTokenCache
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   [FBSDKAccessToken setTokenCache:nil];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   NSObject *tokenCache = (NSObject *) FBSDKAccessToken.tokenCache;
   XCTAssertEqualObjects(tokenCache.class, FBSDKTokenCache.class, "Should be configured with expected concrete token cache");
@@ -423,7 +462,7 @@
 - (void)testInitializingSdkConfiguresProfile
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *store = (NSObject *)[FBSDKProfile store];
   NSObject *tokenProvider = (NSObject *)[FBSDKProfile accessTokenProvider];
   NSObject *notificationCenter = (NSObject *)[FBSDKProfile notificationCenter];
@@ -447,8 +486,7 @@
 - (void)testInitializingSdkConfiguresAuthenticationTokenCache
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [FBSDKAuthenticationToken setTokenCache:nil];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   NSObject *tokenCache = (NSObject *) FBSDKAuthenticationToken.tokenCache;
   XCTAssertEqualObjects(tokenCache.class, FBSDKTokenCache.class, "Should be configured with expected concrete token cache");
@@ -458,7 +496,7 @@
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   FBSDKAccessToken.connectionFactory = nil;
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   NSObject *connectionFactory = (NSObject *) FBSDKAccessToken.connectionFactory;
   XCTAssertEqualObjects(
@@ -472,7 +510,7 @@
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
   [FBSDKSettings reset];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   NSObject *store = (NSObject *) FBSDKSettings.store;
   NSObject *appEventsConfigProvider = (NSObject *) FBSDKSettings.appEventsConfigurationProvider;
@@ -494,8 +532,8 @@
     "Should be configured with the expected concrete info dictionary provider"
   );
   XCTAssertEqualObjects(
-    eventLogger.class,
-    FBSDKEventLogger.class,
+    eventLogger,
+    FBSDKAppEvents.singleton,
     "Should be configured with the expected concrete event logger"
   );
 }
@@ -503,7 +541,7 @@
 - (void)testInitializingSdkConfiguresInternalUtility
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *infoDictionaryProvider = (NSObject *)[FBSDKInternalUtility infoDictionaryProvider];
   XCTAssertEqualObjects(
     infoDictionaryProvider,
@@ -515,7 +553,7 @@
 - (void)testInitializingSdkConfiguresGraphRequestPiggybackManager
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *tokenWallet = (NSObject *) FBSDKGraphRequestPiggybackManager.tokenWallet;
   XCTAssertEqualObjects(
     tokenWallet,
@@ -527,10 +565,10 @@
 - (void)testInitializingSdkAddsBridgeApiObserver
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   XCTAssertTrue(
-    [_delegate.applicationObservers containsObject:FBSDKBridgeAPI.sharedInstance],
+    [self.delegate.applicationObservers containsObject:FBSDKBridgeAPI.sharedInstance],
     "Should add the shared bridge api instance to the application observers"
   );
 }
@@ -538,19 +576,19 @@
 - (void)testInitializingSdkPerformsSettingsLogging
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   XCTAssertEqual(
-    TestSettings.logWarningsCallCount,
+    self.settings.logWarningsCallCount,
     1,
     "Should have settings log warnings upon initialization"
   );
   XCTAssertEqual(
-    TestSettings.logIfSDKSettingsChangedCallCount,
+    self.settings.logIfSDKSettingsChangedCallCount,
     1,
     "Should have settings log if there were changes upon initialization"
   );
   XCTAssertEqual(
-    TestSettings.recordInstallCallCount,
+    self.settings.recordInstallCallCount,
     1,
     "Should have settings record installations upon initialization"
   );
@@ -559,19 +597,38 @@
 - (void)testInitializingSdkConfiguresAppEventsConfigurationManager
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *store = (NSObject *) FBSDKAppEventsConfigurationManager.shared.store;
+  NSObject *settings = (NSObject *) FBSDKAppEventsConfigurationManager.shared.settings;
+  NSObject *requestProvider = (NSObject *) FBSDKAppEventsConfigurationManager.shared.requestFactory;
+  NSObject *connectionProvider = (NSObject *) FBSDKAppEventsConfigurationManager.shared.connectionFactory;
+
   XCTAssertEqualObjects(
     store,
     NSUserDefaults.standardUserDefaults,
     "Should be configured with the expected concrete data store"
+  );
+  XCTAssertEqualObjects(
+    settings,
+    FBSDKSettings.sharedSettings,
+    "Should be configured with the expected concrete settings"
+  );
+  XCTAssertEqualObjects(
+    requestProvider.class,
+    FBSDKGraphRequestFactory.class,
+    "Should be configured with the expected concrete request provider"
+  );
+  XCTAssertEqualObjects(
+    connectionProvider.class,
+    FBSDKGraphRequestConnectionFactory.class,
+    "Should be configured with the expected concrete connection provider"
   );
 }
 
 - (void)testInitializingSdkConfiguresCurrentAccessTokenProviderForGraphRequest
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
 
   XCTAssertEqualObjects(
     [FBSDKGraphRequest currentAccessTokenStringProvider],
@@ -583,7 +640,7 @@
 - (void)testInitializingSdkConfiguresWebDialogView
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *webViewProvider = (NSObject *) FBSDKWebDialogView.webViewProvider;
   NSObject *urlOpener = (NSObject *) FBSDKWebDialogView.urlOpener;
   XCTAssertEqualObjects(
@@ -598,10 +655,22 @@
   );
 }
 
+- (void)testInitializingSdkConfiguresFeatureExtractor
+{
+  [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
+  NSObject *keyProvider = (NSObject *) FBSDKFeatureExtractor.keyProvider;
+  XCTAssertEqualObjects(
+    keyProvider.class,
+    FBSDKModelManager.class,
+    "Should be configured with the expected concrete web view provider"
+  );
+}
+
 - (void)testInitializingSdkConfiguresButtonSuperclass
 {
   [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
-  [_delegate initializeSDKWithLaunchOptions:@{}];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
   NSObject *notifier = (NSObject *) FBSDKButton.applicationActivationNotifier;
   XCTAssertEqualObjects(
     notifier.class,
@@ -610,12 +679,22 @@
   );
 }
 
+- (void)testInitializingSdkChecksInstrumentFeature
+{
+  [FBSDKApplicationDelegate resetHasInitializeBeenCalled];
+  [self.delegate initializeSDKWithLaunchOptions:@{}];
+  XCTAssert(
+    [self.featureChecker capturedFeaturesContains:FBSDKFeatureInstrument],
+    "Should check if the instrument feature is enabled on initialization"
+  );
+}
+
 - (void)testDidFinishLaunchingLaunchedApp
 {
-  _delegate.isAppLaunched = YES;
+  self.delegate.isAppLaunched = YES;
 
   XCTAssertFalse(
-    [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil],
+    [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil],
     "Should return false if the application is already launched"
   );
 }
@@ -627,11 +706,7 @@
                                                   authenticationToken:nil];
   [TestAccessTokenWallet setTokenCache:cache];
 
-  _delegate = [[FBSDKApplicationDelegate alloc] initWithNotificationObserver:[TestNotificationCenter new]
-                                                                 tokenWallet:TestAccessTokenWallet.class
-                                                                    settings:TestSettings.class];
-
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
   XCTAssertEqualObjects(
     TestAccessTokenWallet.currentAccessToken,
@@ -645,7 +720,7 @@
   TestAccessTokenWallet.currentAccessToken = SampleAccessTokens.validToken;
   [TestAccessTokenWallet setTokenCache:[[TestTokenCache alloc] initWithAccessToken:nil authenticationToken:nil]];
 
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
   XCTAssertNil(
     TestAccessTokenWallet.currentAccessToken,
@@ -658,71 +733,56 @@
   FBSDKAuthenticationToken *expected = SampleAuthenticationToken.validToken;
   TestTokenCache *cache = [[TestTokenCache alloc] initWithAccessToken:nil
                                                   authenticationToken:expected];
-  [FBSDKAuthenticationToken setTokenCache:cache];
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  [TestAuthenticationTokenWallet setTokenCache:cache];
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
-  // Should set the current authentication token to the cached access token when it exists
-  OCMVerify(ClassMethod([self.authenticationTokenClassMock setCurrentAuthenticationToken:expected]));
+  XCTAssertEqualObjects(
+    TestAuthenticationTokenWallet.currentAuthenticationToken,
+    expected,
+    "Should set the current authentication token to the cached access token when it exists"
+  );
 }
 
 - (void)testDidFinishLaunchingSetsCurrentAuthenticationTokenWithoutCache
 {
   TestTokenCache *cache = [[TestTokenCache alloc] initWithAccessToken:nil authenticationToken:nil];
-  [FBSDKAuthenticationToken setTokenCache:cache];
+  [TestAuthenticationTokenWallet setTokenCache:cache];
 
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
-  // Should set the current authentication token to nil access token when there isn't a cached token
-  OCMVerify(ClassMethod([self.authenticationTokenClassMock setCurrentAuthenticationToken:nil]));
-}
-
-- (void)testDidFinishLaunchingLoadsServerConfiguration
-{
-  [self stubAllocatingGraphRequestConnection];
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
-
-  // Should load the server configuration on finishing launching
-  OCMVerify(ClassMethod([self.serverConfigurationManagerClassMock loadServerConfigurationWithCompletionBlock:nil]));
+  XCTAssertNil(
+    TestAuthenticationTokenWallet.currentAuthenticationToken,
+    "Should set the current authentication token to nil access token when there isn't a cached token"
+  );
 }
 
 - (void)testDidFinishLaunchingWithAutoLogEnabled
 {
-  [self stubIsAutoLogAppEventsEnabled:YES];
+  [self.settings setStubbedIsAutoLogAppEventsEnabled:YES];
 
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  [self.store setInteger:1 forKey:bitmaskKey];
 
-  // Should log initialization when auto log app events is enabled
-  OCMVerify([_partialDelegateMock _logSDKInitialize]);
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+
+  XCTAssertEqualObjects(
+    self.appEvents.capturedEventName,
+    @"fb_sdk_initialize",
+    "Should log initialization when auto log app events is enabled"
+  );
 }
 
 - (void)testDidFinishLaunchingWithAutoLogDisabled
 {
-  // Should not log initialization when auto log app events are disabled
-  OCMReject([_partialDelegateMock _logSDKInitialize]);
+  [self.settings setStubbedIsAutoLogAppEventsEnabled:NO];
 
-  [self stubIsAutoLogAppEventsEnabled:NO];
+  [self.store setInteger:1 forKey:bitmaskKey];
 
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
-}
+  [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
-- (void)testDidFinishLaunchingSetsProfileWithCache
-{
-  [self stubCachedProfileWith:_profile];
-
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
-
-  // Should set the current profile to the value fetched from the cache
-  OCMVerify([self.profileClassMock setCurrentProfile:_profile]);
-}
-
-- (void)testDidFinishLaunchingSetsProfileWithoutCache
-{
-  [self stubCachedProfileWith:nil];
-
-  [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
-
-  // Should set the current profile to nil when the cache is empty
-  OCMVerify([self.profileClassMock setCurrentProfile:nil]);
+  XCTAssertNil(
+    self.appEvents.capturedEventName,
+    "Should not log initialization when auto log app events are disabled"
+  );
 }
 
 - (void)testDidFinishLaunchingWithObservers
@@ -730,10 +790,10 @@
   TestApplicationDelegateObserver *observer1 = [TestApplicationDelegateObserver new];
   TestApplicationDelegateObserver *observer2 = [TestApplicationDelegateObserver new];
 
-  [_delegate addObserver:observer1];
-  [_delegate addObserver:observer2];
+  [self.delegate addObserver:observer1];
+  [self.delegate addObserver:observer2];
 
-  BOOL notifiedObservers = [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  BOOL notifiedObservers = [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
   XCTAssertEqual(
     observer1.didFinishLaunchingCallCount,
@@ -750,60 +810,57 @@
 
 - (void)testDidFinishLaunchingWithoutObservers
 {
-  BOOL notifiedObservers = [_delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
+  BOOL notifiedObservers = [self.delegate application:UIApplication.sharedApplication didFinishLaunchingWithOptions:nil];
 
   XCTAssertFalse(notifiedObservers, "Should indicate if no observers were notified");
 }
 
-- (void)testApplicationOpenURL
-{
-  [_delegate application:UIApplication.sharedApplication openURL:[NSURL URLWithString:@"fb://test.com"] options:@{}];
-
-  OCMVerify([self.featureManagerClassMock checkFeature:FBSDKFeatureAEM completionBlock:[OCMArg any]]);
-}
-
 - (void)testAppEventsEnabled
 {
-  [self stubIsAutoLogAppEventsEnabled:YES];
-  OCMStub(ClassMethod([self.appEventsMock activateApp]));
+  [self.settings setStubbedIsAutoLogAppEventsEnabled:YES];
 
-  id notification = OCMClassMock([NSNotification class]);
-  [_delegate applicationDidBecomeActive:notification];
+  NSNotification *notification = [[NSNotification alloc] initWithName:UIApplicationDidBecomeActiveNotification
+                                                               object:self
+                                                             userInfo:nil];
 
-  OCMVerify([self.appEventsMock activateApp]);
+  [self.delegate applicationDidBecomeActive:notification];
+
+  XCTAssertTrue(
+    self.appEvents.wasActivateAppCalled,
+    "Should have app events activate the app when autolog app events is enabled"
+  );
+  XCTAssertEqual(
+    self.appEvents.capturedApplicationState,
+    UIApplicationStateActive,
+    "Should set the application state to active when the notification is received"
+  );
 }
 
 - (void)testAppEventsDisabled
 {
-  [self stubIsAutoLogAppEventsEnabled:NO];
+  [self.settings setStubbedIsAutoLogAppEventsEnabled:NO];
 
-  OCMReject([self.appEventsMock activateApp]);
-  OCMStub(ClassMethod([self.appEventsMock activateApp]));
+  NSNotification *notification = [[NSNotification alloc] initWithName:UIApplicationDidBecomeActiveNotification
+                                                               object:self
+                                                             userInfo:nil];
+  [self.delegate applicationDidBecomeActive:notification];
 
-  id notification = OCMClassMock([NSNotification class]);
-  [_delegate applicationDidBecomeActive:notification];
-}
-
-- (void)testAppNotifyObserversWhenAppWillResignActive
-{
-  id observer = OCMStrictProtocolMock(@protocol(FBSDKApplicationObserving));
-  [_delegate addObserver:observer];
-
-  NSNotification *notification = OCMClassMock([NSNotification class]);
-  id application = OCMClassMock([UIApplication class]);
-  [OCMStub([notification object]) andReturn:application];
-  OCMExpect([observer applicationWillResignActive:application]);
-
-  [_delegate applicationWillResignActive:notification];
-
-  OCMVerify([observer applicationWillResignActive:application]);
+  XCTAssertFalse(
+    self.appEvents.wasActivateAppCalled,
+    "Should not have app events activate the app when autolog app events is enabled"
+  );
+  XCTAssertEqual(
+    self.appEvents.capturedApplicationState,
+    UIApplicationStateActive,
+    "Should set the application state to active when the notification is received"
+  );
 }
 
 - (void)testSetApplicationState
 {
-  [_delegate setApplicationState:UIApplicationStateBackground];
+  [self.delegate setApplicationState:UIApplicationStateBackground];
   XCTAssertEqual(
-    [FBSDKAppEvents applicationState],
+    self.appEvents.capturedApplicationState,
     UIApplicationStateBackground,
     "The value of applicationState after calling setApplicationState should be UIApplicationStateBackground"
   );

@@ -28,9 +28,21 @@
 #import "FBSDKTestCase.h"
 #import "FakeLoginManager.h"
 
+@interface FBSDKBridgeAPI (Testing)
+- (void)_openURLWithSafariViewController:(NSURL *)url
+                                  sender:(id<FBSDKURLOpening>)sender
+                      fromViewController:(UIViewController *)fromViewController
+                                 handler:(FBSDKSuccessBlock)handler
+                           dylibResolver:(id<FBSDKDynamicFrameworkResolving>)dylibResolver;
+- (void)openURLWithAuthenticationSession:(NSURL *)url;
+- (void)setSessionCompletionHandlerFromHandler:(void (^)(BOOL, NSError *))handler;
+
+@end
+
 @interface FBSDKBridgeAPITests : FBSDKTestCase
 
 @property FBSDKBridgeAPI *api;
+@property (nonatomic) TestLogger *logger;
 @property id partialMock;
 @property (readonly) NSURL *sampleUrl;
 @property (readonly) NSError *sampleError;

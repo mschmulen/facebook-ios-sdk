@@ -3,7 +3,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'FBSDKLoginKit'
-  s.version      = '9.3.0'
+  s.version      = '11.0.0'
   s.summary      = 'Official Facebook SDK for iOS to access Facebook Platform with features like Login, Share and Message Dialog, App Links, and Graph API'
 
   s.description  = <<-DESC
@@ -36,9 +36,14 @@ Pod::Spec.new do |s|
 
   s.default_subspecs = 'Login'
   s.swift_version = '5.0'
-  s.prefix_header_contents = '#define FBSDKCOCOAPODS'
+
+  s.pod_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1',
+    'OTHER_SWIFT_FLAGS': '$(inherited) -Xcc -DFBSDKCOCOAPODS',
+  }
 
   s.subspec 'Login' do |ss|
+    ss.dependency 'FBSDKCoreKit_Basics', "~> #{s.version}"
     ss.dependency 'FBSDKCoreKit', "~> #{s.version}"
     ss.exclude_files = 'FBSDKLoginKit/FBSDKLoginKit/include/**/*',
                        'FBSDKLoginKit/FBSDKLoginKit/Swift/Exports.swift'

@@ -16,8 +16,6 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <OCMock/OCMock.h>
-
 @import TestTools;
 
 #import <XCTest/XCTest.h>
@@ -37,9 +35,10 @@
 + (void)loadProfileWithToken:(FBSDKAccessToken *)token
                   completion:(FBSDKProfileBlock)completion
                 graphRequest:(id<FBSDKGraphRequest>)request;
++ (NSString *)graphPathForToken:(FBSDKAccessToken *)token;
 @end
 
-@interface FBSDKProfileTests : FBSDKTestCase
+@interface FBSDKProfileTests : XCTestCase
 
 @end
 
@@ -50,6 +49,7 @@
   CGSize _validNonSquareSize;
   CGSize _validSquareSize;
   NSString *_validClientToken;
+  TestGraphRequest *_testGraphRequest;
 }
 
 NSString *const accessTokenKey = @"access_token";
@@ -63,13 +63,19 @@ NSString *const heightKey = @"height";
 
   [self resetCaches];
 
+  [FBSDKSettings configureWithStore:[UserDefaultsSpy new]
+     appEventsConfigurationProvider:TestAppEventsConfigurationProvider.class
+             infoDictionaryProvider:[TestBundle new]
+                        eventLogger:[TestAppEvents new]];
+
   _sdkVersion = @"100";
   _profile = SampleUserProfiles.valid;
   _validClientToken = @"Foo";
   _validSquareSize = CGSizeMake(100, 100);
   _validNonSquareSize = CGSizeMake(10, 20);
+  _testGraphRequest = [TestGraphRequest new];
 
-  [self stubGraphAPIVersionWith:_sdkVersion];
+  FBSDKSettings.graphAPIVersion = _sdkVersion;
   FBSDKProfile.accessTokenProvider = TestAccessTokenWallet.class;
 }
 
@@ -123,7 +129,7 @@ NSString *const heightKey = @"height";
 
 - (void)testCreatingImageURLWithClientTokenNoAccessToken
 {
-  [self stubClientTokenWith:_validClientToken];
+  FBSDKSettings.clientToken = _validClientToken;
 
   NSURL *url = [_profile imageURLForPictureMode:FBSDKProfilePictureModeNormal size:_validSquareSize];
   NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:true];
@@ -165,7 +171,7 @@ NSString *const heightKey = @"height";
 - (void)testCreatingImageURLWithAccessTokenAndClientToken
 {
   [TestAccessTokenWallet setCurrentAccessToken:SampleAccessTokens.validToken];
-  [self stubClientTokenWith:_validClientToken];
+  FBSDKSettings.clientToken = _validClientToken;
 
   NSURL *url = [_profile imageURLForPictureMode:FBSDKProfilePictureModeNormal size:_validSquareSize];
   NSURLComponents *components = [NSURLComponents componentsWithURL:url resolvingAgainstBaseURL:true];
@@ -352,19 +358,6 @@ NSString *const heightKey = @"height";
 
 - (void)testGraphPathForProfileLoadWithFriendsPermission
 {
-  id profileMock = OCMClassMock([FBSDKProfile class]);
-  FBSDKAccessToken *token = [SampleAccessTokens createWithPermissions:@[@"user_friends"]];
-  NSString *graphPath = @"me?fields=id,first_name,middle_name,last_name,name,friends";
-  __block BOOL graphRequestMethodInvoked = false;
-  OCMStub([profileMock loadProfileWithToken:OCMOCK_ANY completion:OCMOCK_ANY graphRequest:OCMOCK_ANY]).andDo(^(NSInvocation *invocation) {
-    __unsafe_unretained FBSDKGraphRequest *request;
-    [invocation getArgument:&request atIndex:4];
-    graphRequestMethodInvoked = true;
-    XCTAssertEqualObjects(request.graphPath, graphPath);
-  });
-  OCMStub([profileMock loadProfileWithToken:OCMOCK_ANY completion:OCMOCK_ANY]).andForwardToRealObject();
-  [FBSDKProfile loadProfileWithToken:token completion:nil];
-  XCTAssertTrue(graphRequestMethodInvoked);
   [self verifyGraphPath:@"me?fields=id,first_name,middle_name,last_name,name,friends" forPermissions:@[@"user_friends"]];
 }
 
@@ -378,14 +371,30 @@ NSString *const heightKey = @"height";
   [self verifyGraphPath:@"me?fields=id,first_name,middle_name,last_name,name,age_range" forPermissions:@[@"user_age_range"]];
 }
 
+- (void)testGraphPathForProfileLoadWithHometownPermission
+{
+  [self verifyGraphPath:@"me?fields=id,first_name,middle_name,last_name,name,hometown" forPermissions:@[@"user_hometown"]];
+}
+
+- (void)testGraphPathForProfileLoadWithLocationPermission
+{
+  [self verifyGraphPath:@"me?fields=id,first_name,middle_name,last_name,name,location" forPermissions:@[@"user_location"]];
+}
+
+- (void)testGraphPathForProfileLoadWithGenderPermission
+{
+  [self verifyGraphPath:@"me?fields=id,first_name,middle_name,last_name,name,gender" forPermissions:@[@"user_gender"]];
+}
+
 - (void)testLoadingProfile
 {
-  [self stubGraphRequestWithResult:self.sampleGraphResult error:nil connection:nil];
   NSDateFormatter *formatter = NSDateFormatter.new;
   [formatter setDateFormat:@"MM/dd/yyyy"];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertEqualObjects(profile.firstName, SampleUserProfiles.valid.firstName);
                             XCTAssertEqualObjects(profile.middleName, SampleUserProfiles.valid.middleName);
                             XCTAssertEqualObjects(profile.lastName, SampleUserProfiles.valid.lastName);
@@ -396,7 +405,13 @@ NSString *const heightKey = @"height";
                             XCTAssertEqualObjects(profile.friendIDs, SampleUserProfiles.valid.friendIDs);
                             XCTAssertEqualObjects([formatter stringFromDate:profile.birthday], self.sampleGraphResult[@"birthday"]);
                             XCTAssertEqualObjects(profile.ageRange, SampleUserProfiles.valid.ageRange);
-                          } graphRequest:self.graphRequestMock];
+                            XCTAssertEqualObjects(profile.hometown, SampleUserProfiles.valid.hometown);
+                            XCTAssertEqualObjects(profile.location, SampleUserProfiles.valid.location);
+                            XCTAssertEqualObjects(profile.gender, SampleUserProfiles.valid.gender);
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, self.sampleGraphResult, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testLoadingProfileWithInvalidLink
@@ -410,28 +425,31 @@ NSString *const heightKey = @"height";
     @"link" : @"   ",
     @"email" : SampleUserProfiles.valid.email
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertNil(profile.linkURL);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testProfileNilWithNilAccessToken
 {
-  id result = @{
-    @"id" : SampleUserProfiles.valid.userID,
-    @"first_name" : SampleUserProfiles.valid.firstName,
-    @"middle_name" : SampleUserProfiles.valid.middleName,
-    @"last_name" : SampleUserProfiles.valid.lastName,
-    @"name" : SampleUserProfiles.valid.name
-  };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
-
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:nil completion:^(FBSDKProfile *profile, NSError *error) {
+                                           didInvokeCompletion = YES;
                                            XCTAssertNil(profile);
-                                         } graphRequest:self.graphRequestMock];
+                                         } graphRequest:_testGraphRequest];
+  XCTAssertTrue(didInvokeCompletion);
+  XCTAssertEqual(
+    _testGraphRequest.startCallCount,
+    0,
+    "Should not fetch a profile if there is no access token"
+  );
 }
 
 - (void)testLoadingProfileWithNoFriends
@@ -446,13 +464,17 @@ NSString *const heightKey = @"height";
     @"email" : SampleUserProfiles.valid.email,
     @"friends" : @{@"data" : @[]}
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertNotNil(profile);
                             XCTAssertNil(profile.friendIDs);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testLoadingProfileWithInvalidFriends
@@ -467,13 +489,17 @@ NSString *const heightKey = @"height";
     @"email" : SampleUserProfiles.valid.email,
     @"friends" : @"   "
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertNotNil(profile);
                             XCTAssertNil(profile.friendIDs);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testLoadingProfileWithInvalidBithday
@@ -488,13 +514,17 @@ NSString *const heightKey = @"height";
     @"email" : SampleUserProfiles.valid.email,
     @"birthday" : @123
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertNotNil(profile);
                             XCTAssertNil(profile.birthday);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testLoadingProfileWithInvalidAgeRange
@@ -509,29 +539,102 @@ NSString *const heightKey = @"height";
     @"email" : SampleUserProfiles.valid.email,
     @"age_range" : @"ageRange"
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
                             XCTAssertNotNil(profile);
                             XCTAssertNil(profile.ageRange);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
+}
+
+- (void)testLoadingProfileWithInvalidHometown
+{
+  id result = @{
+    @"id" : SampleUserProfiles.valid.userID,
+    @"first_name" : SampleUserProfiles.valid.firstName,
+    @"middle_name" : SampleUserProfiles.valid.middleName,
+    @"last_name" : SampleUserProfiles.valid.lastName,
+    @"name" : SampleUserProfiles.valid.name,
+    @"link" : SampleUserProfiles.valid.linkURL,
+    @"email" : SampleUserProfiles.valid.email,
+    @"hometown" : @"hometown"
+  };
+
+  __block BOOL didInvokeCompletion = NO;
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
+                          completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
+                            XCTAssertNotNil(profile);
+                            XCTAssertNil(profile.hometown);
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
+}
+
+- (void)testLoadingProfileWithInvalidLocation
+{
+  id result = @{
+    @"id" : SampleUserProfiles.valid.userID,
+    @"first_name" : SampleUserProfiles.valid.firstName,
+    @"middle_name" : SampleUserProfiles.valid.middleName,
+    @"last_name" : SampleUserProfiles.valid.lastName,
+    @"name" : SampleUserProfiles.valid.name,
+    @"link" : SampleUserProfiles.valid.linkURL,
+    @"email" : SampleUserProfiles.valid.email,
+    @"location" : @"location"
+  };
+
+  __block BOOL didInvokeCompletion = NO;
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
+                          completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
+                            XCTAssertNotNil(profile);
+                            XCTAssertNil(profile.location);
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
+}
+
+- (void)testLoadingProfileWithInvalidGender
+{
+  id result = @{
+    @"id" : SampleUserProfiles.valid.userID,
+    @"first_name" : SampleUserProfiles.valid.firstName,
+    @"middle_name" : SampleUserProfiles.valid.middleName,
+    @"last_name" : SampleUserProfiles.valid.lastName,
+    @"name" : SampleUserProfiles.valid.name,
+    @"link" : SampleUserProfiles.valid.linkURL,
+    @"email" : SampleUserProfiles.valid.email,
+    @"gender" : @{}
+  };
+
+  __block BOOL didInvokeCompletion = NO;
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
+                          completion:^(FBSDKProfile *profile, NSError *error) {
+                            didInvokeCompletion = YES;
+                            XCTAssertNotNil(profile);
+                            XCTAssertNil(profile.gender);
+                          } graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeCompletion);
 }
 
 - (void)testProfileNotRefreshedIfNotStale
 {
   [FBSDKProfile setCurrentProfile:SampleUserProfiles.valid];
-  id result = @{
-    @"id" : SampleUserProfiles.valid.userID,
-    @"first_name" : @"firstname",
-    @"middle_name" : @"middlename",
-    @"last_name" : @"lastname",
-    @"name" : @"name"
-  };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
+  __block BOOL didInvokeCompletion = NO;
   [FBSDKProfile loadProfileWithToken:nil
                           completion:^(FBSDKProfile *_Nullable profile, NSError *_Nullable error) {
+                            didInvokeCompletion = YES;
                             XCTAssertEqualObjects(profile.firstName, SampleUserProfiles.valid.firstName);
                             XCTAssertEqualObjects(profile.middleName, SampleUserProfiles.valid.middleName);
                             XCTAssertEqualObjects(profile.lastName, SampleUserProfiles.valid.lastName);
@@ -539,7 +642,15 @@ NSString *const heightKey = @"height";
                             XCTAssertEqualObjects(profile.userID, SampleUserProfiles.valid.userID);
                             XCTAssertEqualObjects(profile.linkURL, SampleUserProfiles.valid.linkURL);
                             XCTAssertEqualObjects(profile.email, SampleUserProfiles.valid.email);
-                          } graphRequest:self.graphRequestMock];
+                          } graphRequest:_testGraphRequest];
+
+  XCTAssertTrue(didInvokeCompletion);
+
+  XCTAssertEqual(
+    _testGraphRequest.startCallCount,
+    0,
+    "Should not fetch a profile if it is not stale"
+  );
 }
 
 - (void)testLoadingProfileWithLimitedProfileWithoutToken
@@ -619,38 +730,44 @@ NSString *const heightKey = @"height";
 - (void)testProfileParseBlockInvokedOnSuccessfulGraphRequest
 {
   id result = @{};
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
-
   __block BOOL parseBlockInvoked = false;
 
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^void (FBSDKProfile *profile, NSError *error) {}
-                        graphRequest:self.graphRequestMock
+                        graphRequest:_testGraphRequest
                           parseBlock:^void (id parseResult, FBSDKProfile **profileRef) {
                             parseBlockInvoked = true;
                           }];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+
   XCTAssertTrue(parseBlockInvoked);
 }
 
 - (void)testProfileParseBlockShouldHaveNonNullPointer
 {
   id result = @{};
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
-
+  __block BOOL didInvokeParseBlock = NO;
   [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                           completion:^void (FBSDKProfile *profile, NSError *error) {}
-                        graphRequest:self.graphRequestMock
+                        graphRequest:_testGraphRequest
                           parseBlock:^void (id parseResult, FBSDKProfile **profileRef) {
+                            didInvokeParseBlock = YES;
                             XCTAssertTrue(profileRef != NULL);
                           }];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+  XCTAssertTrue(didInvokeParseBlock);
 }
 
 - (void)testProfileParseBlockReturnsNilIfResultIsEmpty
 {
   id result = @{};
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
 
-  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:self.graphRequestMock];
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:_testGraphRequest];
+
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
+
   XCTAssertNil(FBSDKProfile.currentProfile);
 }
 
@@ -662,9 +779,8 @@ NSString *const heightKey = @"height";
     @"last_name" : @"lastname",
     @"name" : @"name"
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
-
-  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:self.graphRequestMock];
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:_testGraphRequest];
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
   XCTAssertNil(FBSDKProfile.currentProfile);
 }
 
@@ -677,9 +793,8 @@ NSString *const heightKey = @"height";
     @"last_name" : @"lastname",
     @"name" : @"name"
   };
-  [self stubGraphRequestWithResult:result error:nil connection:nil];
-
-  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:self.graphRequestMock];
+  [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken completion:nil graphRequest:_testGraphRequest];
+  _testGraphRequest.capturedCompletionHandler(nil, result, nil);
   XCTAssertNil(FBSDKProfile.currentProfile);
 }
 
@@ -687,14 +802,13 @@ NSString *const heightKey = @"height";
 {
   for (int i = 0; i < 100; i++) {
     NSDictionary *randomizedResult = [Fuzzer randomizeWithJson:self.sampleGraphResult];
-    [self stubGraphRequestWithResult:randomizedResult error:nil connection:nil];
-
     __block BOOL completed = NO;
     [FBSDKProfile loadProfileWithToken:SampleAccessTokens.validToken
                             completion:^(FBSDKProfile *_Nullable profile, NSError *_Nullable error) {
                               completed = YES;
-                            } graphRequest:self.graphRequestMock];
+                            } graphRequest:_testGraphRequest];
 
+    _testGraphRequest.capturedCompletionHandler(nil, randomizedResult, nil);
     XCTAssert(completed, @"Completion handler should be invoked synchronously");
   }
 }
@@ -769,6 +883,21 @@ NSString *const heightKey = @"height";
     "Should encode the expected user age range"
   );
   XCTAssertEqualObjects(
+    coder.encodedObject[@"hometown"],
+    _profile.hometown,
+    "Should encode the expected user hometown"
+  );
+  XCTAssertEqualObjects(
+    coder.encodedObject[@"location"],
+    _profile.location,
+    "Should encode the expected user location"
+  );
+  XCTAssertEqualObjects(
+    coder.encodedObject[@"gender"],
+    _profile.gender,
+    "Should encode the expected user gender"
+  );
+  XCTAssertEqualObjects(
     coder.encodedObject[@"isLimited"],
     @YES,
     "Should encode the expected 'isLimited' value as an object"
@@ -841,6 +970,21 @@ NSString *const heightKey = @"height";
     "Should decode a UserAgeRange object for the ageRange key"
   );
   XCTAssertEqualObjects(
+    coder.decodedObject[@"hometown"],
+    FBSDKLocation.class,
+    "Should decode a Location object for the hometown key"
+  );
+  XCTAssertEqualObjects(
+    coder.decodedObject[@"location"],
+    FBSDKLocation.class,
+    "Should decode a Location object for the location key"
+  );
+  XCTAssertEqualObjects(
+    coder.decodedObject[@"gender"],
+    NSString.class,
+    "Should decode a string for the gender key"
+  );
+  XCTAssertEqualObjects(
     coder.decodedObject[@"isLimited"],
     @"decodeBoolForKey",
     "Should decode a bool for the isLimited key"
@@ -873,24 +1017,24 @@ NSString *const heightKey = @"height";
     @"age_range" : @{
       @"min" : SampleUserProfiles.valid.ageRange.min,
     },
+    @"hometown" : @{
+      @"id" : SampleUserProfiles.valid.hometown.id,
+      @"name" : SampleUserProfiles.valid.hometown.name,
+    },
+    @"location" : @{
+      @"id" : SampleUserProfiles.valid.location.id,
+      @"name" : SampleUserProfiles.valid.location.name,
+    },
+    @"gender" : SampleUserProfiles.valid.gender,
   };
 }
 
 - (void)verifyGraphPath:(NSString *)expectedPath
          forPermissions:(NSArray *)permissions
 {
-  id profileMock = OCMClassMock([FBSDKProfile class]);
   FBSDKAccessToken *token = [SampleAccessTokens createWithPermissions:permissions];
-  __block BOOL graphRequestMethodInvoked = false;
-  OCMStub([profileMock loadProfileWithToken:OCMOCK_ANY completion:OCMOCK_ANY graphRequest:OCMOCK_ANY]).andDo(^(NSInvocation *invocation) {
-    __unsafe_unretained FBSDKGraphRequest *request;
-    [invocation getArgument:&request atIndex:4];
-    graphRequestMethodInvoked = true;
-    XCTAssertEqualObjects(request.graphPath, expectedPath);
-  });
-  OCMStub([profileMock loadProfileWithToken:OCMOCK_ANY completion:OCMOCK_ANY]).andForwardToRealObject();
-  [FBSDKProfile loadProfileWithToken:token completion:nil];
-  XCTAssertTrue(graphRequestMethodInvoked);
+  NSString *graphPath = [FBSDKProfile graphPathForToken:token];
+  XCTAssertEqualObjects(graphPath, expectedPath);
 }
 
 @end

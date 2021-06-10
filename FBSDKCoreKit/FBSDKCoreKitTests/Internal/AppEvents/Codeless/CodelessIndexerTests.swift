@@ -26,7 +26,7 @@ class CodelessIndexerTests: XCTestCase { // swiftlint:disable:this type_body_len
   let store = UserDefaultsSpy()
   let connection: TestGraphRequestConnection = TestGraphRequestConnection()
   lazy var connectionFactory: TestGraphRequestConnectionFactory = {
-    return TestGraphRequestConnectionFactory.create(withStubbedConnection: connection)
+    TestGraphRequestConnectionFactory.create(withStubbedConnection: connection)
   }()
   let settings = TestSettings()
   let advertiserIDProvider = TestAdvertiserIDProvider()
@@ -694,7 +694,7 @@ class CodelessIndexerTests: XCTestCase { // swiftlint:disable:this type_body_len
     XCTAssertEqual(
       CodelessIndexer.extInfo,
       """
-      ["x86_64","","1","1","en_US"]
+      ["x86_64","\(AppEventsUtility.shared.advertiserID ?? "")","1","1","en_US"]
       """,
       "Should be able to provide extra info as a string representation of an array of strings"
     )
@@ -819,7 +819,7 @@ class CodelessIndexerTests: XCTestCase { // swiftlint:disable:this type_body_len
     isEnabled: Bool = true,
     date: Date = Date()
   ) -> Data {
-    return NSKeyedArchiver.archivedData(
+    NSKeyedArchiver.archivedData(
       withRootObject: [
         "codeless_setup_enabled": isEnabled,
         "codeless_setting_timestamp": date

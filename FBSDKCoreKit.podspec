@@ -3,7 +3,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'FBSDKCoreKit'
-  s.version      = '9.3.0'
+  s.version      = '11.0.0'
   s.summary      = 'Official Facebook SDK for iOS to access Facebook Platform core features'
 
   s.description  = <<-DESC
@@ -29,24 +29,20 @@ Pod::Spec.new do |s|
   s.ios.weak_frameworks = 'Accelerate', 'Accounts', 'AdSupport', 'Social', 'Security', 'StoreKit', 'QuartzCore', 'CoreGraphics', 'UIKit', 'Foundation', 'AudioToolbox'
   s.tvos.weak_frameworks = 'CoreLocation', 'Security', 'QuartzCore', 'CoreGraphics', 'UIKit', 'Foundation', 'AudioToolbox'
 
-  s.default_subspecs = 'Core', 'Basics'
+  s.default_subspecs = 'Core'
   s.swift_version = '5.0'
   s.pod_target_xcconfig = {
     'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1',
-    'DEFINES_MODULE': 'YES'
+    'DEFINES_MODULE': 'YES',
   }
-  s.user_target_xcconfig = {'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1' }
+  s.user_target_xcconfig = {
+    'GCC_PREPROCESSOR_DEFINITIONS': '$(inherited) FBSDKCOCOAPODS=1'
+  }
   s.library = 'c++', 'stdc++'
 
-  s.subspec 'Basics' do |ss|
-    ss.source_files = 'Sources/FBSDKCoreKit_Basics/**/*.{h,m}'
-    ss.private_header_files = 'Sources/FBSDKCoreKit_Basics/**/*+Internal.h'
-    ss.library = 'z'
-  end
-
   s.subspec 'Core' do |ss|
-    ss.dependency 'FBSDKCoreKit/Basics'
-    ss.exclude_files = 'Sources/FBSDKCoreKit_Basics/**/*',
+    ss.dependency 'FBSDKCoreKit_Basics', "~> #{s.version}"
+    ss.exclude_files = 'Sources/FacebookCore/Exports.swift',
                        'FBSDKCoreKit/FBSDKCoreKit/include/**/*',
                        'FBSDKCoreKit/FBSDKCoreKit/Swift/Exports.swift'
     ss.source_files = 'FBSDKCoreKit/FBSDKCoreKit/**/*.{h,hpp,m,mm}',

@@ -16,6 +16,10 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#import "FBSDKAEMAdvertiserMultiEntryRule.h"
+#import "FBSDKAEMAdvertiserRuleFactory.h"
+#import "FBSDKAEMAdvertiserRuleMatching.h"
+#import "FBSDKAEMAdvertiserSingleEntryRule.h"
 #import "FBSDKAEMConfiguration.h"
 #import "FBSDKAEMEvent.h"
 #import "FBSDKAEMInvocation.h"
@@ -38,6 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (NSSet<NSString *> *)getCurrencySetFromRules:(NSArray<FBSDKAEMRule *> *)rules;
 
++ (id<FBSDKAEMAdvertiserRuleProviding>)ruleProvider;
+
 @end
 
 @interface FBSDKAEMInvocation (Testing)
@@ -46,13 +52,13 @@ NS_ASSUME_NONNULL_BEGIN
                                    ACSToken:(NSString *)ACSToken
                             ACSSharedSecret:(nullable NSString *)ACSSharedSecret
                                 ACSConfigID:(nullable NSString *)ACSConfigID
-                               advertiserID:(nullable NSString *)advertiserID;
+                                 businessID:(nullable NSString *)businessID;
 
 - (nullable instancetype)initWithCampaignID:(NSString *)campaignID
                                    ACSToken:(NSString *)ACSToken
                             ACSSharedSecret:(nullable NSString *)ACSSharedSecret
                                 ACSConfigID:(nullable NSString *)ACSConfigID
-                               advertiserID:(nullable NSString *)advertiserID
+                                 businessID:(nullable NSString *)businessID
                                   timestamp:(nullable NSDate *)timestamp
                                  configMode:(nullable NSString *)configMode
                                    configID:(NSInteger)configID
@@ -74,6 +80,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setPriority:(NSInteger)priority;
 
 - (void)setConfigID:(NSInteger)configID;
+
+- (void)setBusinessID:(NSString *_Nullable)businessID;
 
 - (void)setConversionTimestamp:(NSDate *_Nonnull)conversionTimestamp;
 
@@ -100,9 +108,22 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (void)_loadConfigurationWithBlock:(nullable FBSDKAEMReporterBlock)block;
 
++ (nullable FBSDKAEMInvocation *)_attributedInvocation:(NSArray<FBSDKAEMInvocation *> *)invocations
+                                                 Event:(NSString *)event
+                                              currency:(nullable NSString *)currency
+                                                 value:(nullable NSNumber *)value
+                                            parameters:(nullable NSDictionary *)parameters
+                                               configs:(NSDictionary<NSString *, NSMutableArray<FBSDKAEMConfiguration *> *> *)configs;
+
 + (void)_sendAggregationRequest;
 
++ (NSDictionary<NSString *, id> *)_requestParameters;
+
++ (NSDictionary<NSString *, id> *)_aggregationRequestParameters:(FBSDKAEMInvocation *)invocation;
+
 + (BOOL)_isConfigRefreshTimestampValid;
+
++ (BOOL)_shouldRefresh;
 
 + (NSMutableDictionary<NSString *, NSMutableArray<FBSDKAEMConfiguration *> *> *)_loadConfigs;
 
@@ -113,6 +134,39 @@ NS_ASSUME_NONNULL_BEGIN
 + (void)_saveReportData;
 
 + (void)_clearCache;
+
+@end
+
+@interface FBSDKAEMAdvertiserRuleFactory (Testing)
+
+- (nullable FBSDKAEMAdvertiserMultiEntryRule *)createMultiEntryRuleWithDict:(NSDictionary<NSString *, id> *)dict;
+
+- (nullable FBSDKAEMAdvertiserSingleEntryRule *)createSingleEntryRuleWithDict:(NSDictionary<NSString *, id> *)dict;
+
+- (nullable NSString *)primaryKeyForRule:(NSDictionary<NSString *, id> *)rule;
+
+- (FBSDKAEMAdvertiserRuleOperator)getOperator:(NSDictionary<NSString *, id> *)rule;
+
+- (BOOL)isOperatorForMultiEntryRule:(FBSDKAEMAdvertiserRuleOperator)op;
+
+@end
+
+@interface FBSDKAEMAdvertiserSingleEntryRule (Testing)
+
+- (BOOL)isMatchedWithStringValue:(nullable NSString *)stringValue
+                  numericalValue:(nullable NSNumber *)numericalValue;
+
+- (BOOL)isMatchedWithAsteriskParam:(NSString *)param
+                   eventParameters:(NSDictionary<NSString *, id> *)eventParams
+                         paramPath:(NSArray<NSString *> *)paramPath;
+
+- (BOOL)isRegexMatch:(NSString *)stringValue;
+
+- (BOOL)isAnyOf:(NSArray<NSString *> *)arrayCondition
+    stringValue:(NSString *)stringValue
+     ignoreCase:(BOOL)ignoreCase;
+
+- (void)setOperator:(FBSDKAEMAdvertiserRuleOperator)op;
 
 @end
 

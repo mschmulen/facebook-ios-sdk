@@ -18,15 +18,14 @@
 
 @objcMembers
 class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
-
   static var appID: String?
   static var clientToken: String?
   static var userAgentSuffix: String?
-  static var loggingBehaviors = Set<String>()
+  static var loggingBehaviors = Set<LoggingBehavior>()
   static var sdkVersion: String?
-  static var logWarningsCallCount = 0
-  static var logIfSDKSettingsChangedCallCount = 0
-  static var recordInstallCallCount = 0
+  var logWarningsCallCount = 0
+  var logIfSDKSettingsChangedCallCount = 0
+  var recordInstallCallCount = 0
 
   var appID: String?
 
@@ -42,46 +41,46 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
   var shouldUseTokenOptimizations = true
 
   var isDataProcessingRestricted: Bool {
-    return stubbedIsDataProcessingRestricted
+    stubbedIsDataProcessingRestricted
   }
 
   var isAutoLogAppEventsEnabled: Bool {
-    return stubbedIsAutoLogAppEventsEnabled
+    stubbedIsAutoLogAppEventsEnabled
   }
 
   var isSetATETimeExceedsInstallTime: Bool {
-    return stubbedIsSetATETimeExceedsInstallTime
+    stubbedIsSetATETimeExceedsInstallTime
   }
 
   var isSKAdNetworkReportEnabled: Bool {
-    return stubbedIsSKAdNetworkReportEnabled
+    stubbedIsSKAdNetworkReportEnabled
   }
 
-  var loggingBehaviors: Set<String> {
-    return TestSettings.loggingBehaviors
+  var loggingBehaviors: Set<LoggingBehavior> {
+    TestSettings.loggingBehaviors
   }
 
   var shouldLimitEventAndDataUsage: Bool {
-    return stubbedLimitEventAndDataUsage
+    stubbedLimitEventAndDataUsage
   }
 
   var installTimestamp: Date? {
-    return stubbedInstallTimestamp
+    stubbedInstallTimestamp
   }
 
   var advertiserTrackingEnabledTimestamp: Date? {
-    return stubbedSetAdvertiserTrackingEnabledTimestamp
+    stubbedSetAdvertiserTrackingEnabledTimestamp
   }
 
-  static func logWarnings() {
+  func logWarnings() {
     logWarningsCallCount += 1
   }
 
-  static func logIfSDKSettingsChanged() {
+  func logIfSDKSettingsChanged() {
     logIfSDKSettingsChangedCallCount += 1
   }
 
-  static func recordInstall() {
+  func recordInstall() {
     recordInstallCallCount += 1
   }
 
@@ -91,8 +90,5 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
     userAgentSuffix = nil
     loggingBehaviors = []
     sdkVersion = nil
-    logWarningsCallCount = 0
-    logIfSDKSettingsChangedCallCount = 0
-    recordInstallCallCount = 0
   }
 }

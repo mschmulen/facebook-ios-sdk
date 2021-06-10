@@ -49,6 +49,10 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   [super setUp];
   [self resetCaches];
 
+  [FBSDKSettings configureWithStore:[UserDefaultsSpy new]
+     appEventsConfigurationProvider:TestAppEventsConfigurationProvider.class
+             infoDictionaryProvider:[TestBundle new]
+                        eventLogger:[TestAppEvents new]];
   [Manager configureWithTokenWallet:TestAccessTokenWallet.class];
 }
 
@@ -63,6 +67,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 {
   [TestAccessTokenWallet reset];
   [FBSDKGraphRequestPiggybackManager reset];
+  [FBSDKSettings reset];
 }
 
 // MARK: - Defaults
@@ -143,20 +148,20 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)testAddingRequestsWithoutAppID
 {
-  [self stubAppID:@""];
+  FBSDKSettings.appID = @"";
 
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggybackIfStale:OCMArg.any]));
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addServerConfigurationPiggyback:OCMArg.any]));
 
-  [Manager addPiggybackRequests:SampleGraphRequestConnection.empty];
+  [Manager addPiggybackRequests:SampleGraphRequestConnections.empty];
 }
 
 - (void)testAddingRequestsForConnectionWithSafeRequests
 {
-  [self stubAppID:@"abc123"];
+  FBSDKSettings.appID = @"abc123";
   [self stubFetchingCachedServerConfiguration];
 
-  FBSDKGraphRequestConnection *connection = [SampleGraphRequestConnection withRequests:@[SampleGraphRequests.valid]];
+  id<FBSDKGraphRequestConnecting> connection = [SampleGraphRequestConnections withRequests:@[SampleGraphRequests.valid]];
 
   [Manager addPiggybackRequests:connection];
 
@@ -166,9 +171,9 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)testAddingRequestsForConnectionWithUnsafeRequests
 {
-  [self stubAppID:@"abc123"];
+  FBSDKSettings.appID = @"abc123";
   [self stubFetchingCachedServerConfiguration];
-  FBSDKGraphRequestConnection *connection = [SampleGraphRequestConnection withRequests:@[SampleGraphRequests.withAttachment]];
+  id<FBSDKGraphRequestConnecting> connection = [SampleGraphRequestConnections withRequests:@[SampleGraphRequests.withAttachment]];
 
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggybackIfStale:connection]));
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addServerConfigurationPiggyback:connection]));
@@ -178,12 +183,12 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)testAddingRequestsForConnectionWithSafeAndUnsafeRequests
 {
-  [self stubAppID:@"abc123"];
+  FBSDKSettings.appID = @"abc123";
   [self stubFetchingCachedServerConfiguration];
-  FBSDKGraphRequestConnection *connection = [SampleGraphRequestConnection withRequests:@[
+  id<FBSDKGraphRequestConnecting> connection = [SampleGraphRequestConnections withRequests:@[
     SampleGraphRequests.valid,
     SampleGraphRequests.withAttachment
-                                             ]];
+                                                ]];
 
   // No requests are piggybacked if any are invalid
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggybackIfStale:connection]));
@@ -196,14 +201,13 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)testAddsTokenExtensionRequest
 {
-  [self stubAppID:@"abc123"];
+  FBSDKSettings.appID = @"abc123";
   TestAccessTokenWallet.currentAccessToken = SampleAccessTokens.validToken;
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  TestGraphRequestConnection *connection = [TestGraphRequestConnection new];
 
   [Manager addRefreshPiggyback:connection permissionHandler:nil];
 
-  FBSDKGraphRequestMetadata *metadata = connection.requests.firstObject;
-  FBSDKGraphRequest *request = (FBSDKGraphRequest *)metadata.request;
+  id<FBSDKGraphRequest> request = connection.capturedRequests.firstObject;
   XCTAssertNotNil(request, "Adding a refresh piggyback to a connection should add a request for refreshing the access token");
 
   XCTAssertEqualObjects(
@@ -356,14 +360,13 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)testAddsPermissionsRefreshRequest
 {
-  [self stubAppID:@"abc123"];
+  FBSDKSettings.appID = @"abc123";
   TestAccessTokenWallet.currentAccessToken = SampleAccessTokens.validToken;
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  TestGraphRequestConnection *connection = [TestGraphRequestConnection new];
 
   [Manager addRefreshPiggyback:connection permissionHandler:nil];
 
-  FBSDKGraphRequestMetadata *metadata = connection.requests.lastObject;
-  FBSDKGraphRequest *request = (FBSDKGraphRequest *)metadata.request;
+  id<FBSDKGraphRequest> request = connection.capturedRequests.lastObject;
   XCTAssertNotNil(request, "Adding a refresh piggyback to a connection should add a request for refreshing permissions");
 
   XCTAssertEqualObjects(
@@ -503,7 +506,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
   [self completePermissionsRefreshForAccessToken:SampleAccessTokens.validToken
                                          results:results
-                               permissionHandler:^(FBSDKGraphRequestConnection *connection, id result, NSError *error) {
+                               permissionHandler:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
                                  XCTAssertEqualObjects(
                                    result,
                                    results,
@@ -534,7 +537,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   [self completePermissionsRefreshForAccessToken:SampleAccessTokens.validToken
                                          results:results
                                            error:expectedError
-                               permissionHandler:^(FBSDKGraphRequestConnection *connection, id result, NSError *error) {
+                               permissionHandler:^(id<FBSDKGraphRequestConnecting> connection, id result, NSError *error) {
                                  XCTAssertEqualObjects(
                                    result,
                                    results,
@@ -558,7 +561,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   // Shouldn't add the refresh if there's no access token
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 }
 
 - (void)testRefreshIfStaleWithAccessTokenWithoutRefreshDate
@@ -568,7 +571,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   // Should not add the refresh if the access token is missing a refresh date
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 }
 
 // | Last refresh try > an hour ago | Token refresh date > a day ago | should refresh |
@@ -578,7 +581,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   [self stubGraphRequestPiggybackManagerLastRefreshTryWith:NSDate.distantPast];
   TestAccessTokenWallet.currentAccessToken = self.twoDayOldToken;
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 
   OCMVerify(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 }
@@ -592,7 +595,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 }
 
 // | Last refresh try > an hour ago | Token refresh date > a day ago | should refresh |
@@ -604,7 +607,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 }
 
 // | Last refresh try > an hour ago | Token refresh date > a day ago | should refresh |
@@ -617,7 +620,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
   OCMReject(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 }
 
 - (void)testRefreshIfStaleSideEffects
@@ -626,7 +629,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   [self stubGraphRequestPiggybackManagerLastRefreshTryWith:NSDate.distantPast];
   TestAccessTokenWallet.currentAccessToken = self.twoDayOldToken;
 
-  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnection.empty];
+  [Manager addRefreshPiggybackIfStale:SampleGraphRequestConnections.empty];
 
   OCMVerify(ClassMethod([self.graphRequestPiggybackManagerMock addRefreshPiggyback:OCMArg.any permissionHandler:NULL]));
   // Should update last refresh try
@@ -642,14 +645,14 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                         @"timestamp" : self.twoDaysAgo
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
-  [self stubAppID:config.appID];
+  FBSDKSettings.appID = config.appID;
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  TestGraphRequestConnection *connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
-  FBSDKGraphRequestMetadata *requestMetadata = connection.requests.firstObject;
+  id<FBSDKGraphRequest> request = connection.capturedRequests.firstObject;
   FBSDKGraphRequest *expectedServerConfigurationRequest = [FBSDKServerConfigurationManager requestToLoadServerConfiguration:nil];
 
-  [self validateServerConfigurationRequest:(FBSDKGraphRequest *)requestMetadata.request
+  [self validateServerConfigurationRequest:request
                                  isEqualTo:expectedServerConfigurationRequest];
 }
 
@@ -661,7 +664,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  id<_FBSDKGraphRequestConnecting> connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
 
   XCTAssertEqual(
@@ -679,7 +682,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  id<_FBSDKGraphRequestConnecting> connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
 
   XCTAssertEqual(
@@ -697,7 +700,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  id<_FBSDKGraphRequestConnecting> connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
 
   XCTAssertEqual(
@@ -715,7 +718,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  id<_FBSDKGraphRequestConnecting> connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
 
   XCTAssertEqual(
@@ -733,7 +736,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                       }];
   [self stubCachedServerConfigurationWithServerConfiguration:config];
 
-  FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
+  id<_FBSDKGraphRequestConnecting> connection = [TestGraphRequestConnection new];
   [Manager addServerConfigurationPiggyback:connection];
 
   XCTAssertEqual(
@@ -756,7 +759,7 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
   return [SampleAccessTokens createWithRefreshDate:self.twoDaysAgo];
 }
 
-- (void)validateServerConfigurationRequest:(FBSDKGraphRequest *)request isEqualTo:(FBSDKGraphRequest *)expectedRequest
+- (void)validateServerConfigurationRequest:(id<FBSDKGraphRequest>)request isEqualTo:(id<FBSDKGraphRequest>)expectedRequest
 {
   XCTAssertNotNil(request, "Adding a server configuration piggyback should add a request to fetch the server configuration");
 
@@ -890,8 +893,10 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
 
 - (void)completeTokenRefreshForAccessToken:(FBSDKAccessToken *)token results:(NSDictionary *)results
 {
-  [self stubAppID:token.appID];
+  FBSDKSettings.appID = token.appID;
   TestAccessTokenWallet.currentAccessToken = token;
+
+  // TODO: This should be possible to do on an abstracted one.
   FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
 
   [Manager addRefreshPiggyback:connection permissionHandler:nil];
@@ -930,11 +935,17 @@ typedef FBSDKGraphRequestPiggybackManager Manager;
                                            error:(NSError *)error
                                permissionHandler:(FBSDKGraphRequestBlock)permissionHandler
 {
-  [self stubAppID:token.appID];
+  FBSDKSettings.appID = token.appID;
   TestAccessTokenWallet.currentAccessToken = token;
   FBSDKGraphRequestConnection *connection = [FBSDKGraphRequestConnection new];
 
-  [Manager addRefreshPiggyback:connection permissionHandler:permissionHandler];
+  FBSDKGraphRequestCompletion completion = ^void (id<FBSDKGraphRequestConnecting> potentialConnection, id result, NSError *potentialError) {
+    if (permissionHandler) {
+      permissionHandler(FBSDK_CAST_TO_CLASS_OR_NIL(potentialConnection, FBSDKGraphRequestConnection), result, error);
+    }
+  };
+
+  [Manager addRefreshPiggyback:connection permissionHandler:completion];
 
   FBSDKGraphRequestMetadata *tokenRefreshRequestMetadata = connection.requests.firstObject;
   FBSDKGraphRequestMetadata *permissionsRequestMetadata = connection.requests.lastObject;
