@@ -346,7 +346,7 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
   } else {
     // @lint-ignore CLANGTIDY
 #if FBSDK_IDFA_DISALLOWED
-    return FBSDKAdvertisingTrackingDisallowed:
+    return FBSDKAdvertisingTrackingDisallowed;
 #else
     return ASIdentifierManager.sharedManager.advertisingTrackingEnabled ? FBSDKAdvertisingTrackingAllowed : FBSDKAdvertisingTrackingDisallowed;
 #endif
