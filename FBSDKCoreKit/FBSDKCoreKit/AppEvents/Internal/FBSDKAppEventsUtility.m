@@ -184,7 +184,7 @@ static ASIdentifierManager *_cachedAdvertiserIdentifierManager;
   }
 
 #if FBSDK_IDFA_DISALLOWED
-  return nil
+  return nil;
 #else
   ASIdentifierManager *manager = [self _asIdentifierManagerWithShouldUseCachedManager:shouldUseCachedManager
                                                              dynamicFrameworkResolver:dynamicFrameworkResolver];
