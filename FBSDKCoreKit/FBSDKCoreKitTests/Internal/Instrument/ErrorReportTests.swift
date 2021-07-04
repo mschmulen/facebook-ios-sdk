@@ -25,7 +25,6 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
   let code = 2
   let domain = "test"
   let timeInterval = 10.0
-  let request = TestGraphRequest()
   let factory = TestGraphRequestFactory()
   let fileManager = TestFileManager(tempDirectoryURL: SampleUrls.valid)
   let settings = TestSettings()
@@ -43,7 +42,6 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
     SDKError.reset()
     TestFileDataExtractor.reset()
 
-    factory.stubbedRequest = request
     report = ErrorReport(
       graphRequestProvider: factory,
       fileManager: fileManager,
@@ -104,8 +102,8 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
     report.enable()
 
     XCTAssertTrue(
-      SDKError.isErrorReportEnabled,
-      "Enabling error report should inform the SDK error type"
+      report.isEnabled,
+      "Enabling error report should set a flag"
     )
     XCTAssertFalse(
       fileManager.contentsOfDirectoryAtPathWasCalled,
@@ -138,7 +136,7 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
     report.enable()
 
     XCTAssertTrue(
-      SDKError.isErrorReportEnabled,
+      report.isEnabled,
       "This is almost surely not the behavior we want"
     )
   }
@@ -249,7 +247,7 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
   func testCompletingUploadWithoutResultWithoutError() {
     seedErrorReportData()
     report.uploadErrors()
-    request.capturedCompletionHandler?(nil, nil, nil)
+    factory.capturedRequests.first?.capturedCompletionHandler?(nil, nil, nil)
 
     XCTAssertFalse(
       fileManager.removeItemAtPathWasCalled,
@@ -260,7 +258,7 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
   func testCompletingUploadWithoutResultWithError() {
     seedErrorReportData()
     report.uploadErrors()
-    request.capturedCompletionHandler?(nil, nil, SampleError())
+    factory.capturedRequests.first?.capturedCompletionHandler?(nil, nil, SampleError())
 
     XCTAssertFalse(
       fileManager.removeItemAtPathWasCalled,
@@ -271,7 +269,7 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
   func testCompletingUploadWithIncorrectResultTypeWithoutError() {
     seedErrorReportData()
     report.uploadErrors()
-    request.capturedCompletionHandler?(nil, ["foo"], nil)
+    factory.capturedRequests.first?.capturedCompletionHandler?(nil, ["foo"], nil)
 
     XCTAssertFalse(
       fileManager.removeItemAtPathWasCalled,
@@ -282,7 +280,7 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
   func testCompletingUploadWithCorrectResultTypeValidKeyWithoutError() {
     seedErrorReportData()
     report.uploadErrors()
-    request.capturedCompletionHandler?(nil, ["success": "foo"], nil)
+    factory.capturedRequests.first?.capturedCompletionHandler?(nil, ["success": "foo"], nil)
 
     XCTAssertTrue(
       fileManager.removeItemAtPathWasCalled,
@@ -292,14 +290,38 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
 
   // MARK: - Saving
 
-  func testSaving() throws {
-    ErrorReport.saveError(1, errorDomain: "foo", message: "bar")
+  func testSavingWhenDisabled() throws {
+    report.reset()
+
+    // TODO: Remove when saving uses a stub instead of actual disk
+    var isDirectory: ObjCBool = false
+    if FileManager.default.fileExists(atPath: report.directoryPath, isDirectory: &isDirectory) {
+      try FileManager.default.removeItem(atPath: report.directoryPath)
+    }
+
+    report.saveError(1, errorDomain: "foo", message: "bar")
+
+    XCTAssertNil(
+      FileManager.default.subpaths(atPath: report.directoryPath),
+      "Should not write the error to the reports directory when the reporter is not enabled"
+    )
+  }
+
+  func testSavingWhenEnabled() throws {
+    report.enable()
+
+    // TODO: Remove when saving uses a stub instead of actual disk
+    var isDirectory: ObjCBool = false
+    if !FileManager.default.fileExists(atPath: report.directoryPath, isDirectory: &isDirectory) {
+      try FileManager.default.createDirectory(atPath: report.directoryPath, withIntermediateDirectories: false)
+    }
+
+    report.saveError(1, errorDomain: "foo", message: "bar")
 
     guard let files = FileManager.default.subpaths(atPath: report.directoryPath)
     else {
-      return XCTFail("Should write the error to the reports directory")
+      return XCTFail("Should write the error to the reports directory when the reporter is enabled")
     }
-
     XCTAssertTrue(
       files.contains { $0.hasPrefix("error_report") && $0.hasSuffix(".json") },
       "Should contain the file with the error report"

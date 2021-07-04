@@ -19,21 +19,29 @@
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
 #import <AdSupport/AdSupport.h>
 
+#import "FBSDKAdvertisingTrackingStatus.h"
 #import "AEM+Testing.h"
 #import "ApplicationDelegate+Testing.h"
 #import "AppEventsAtePublisher+Testing.h"
+#import "BackgroundEventLogger+Testing.h"
 #import "Button+Testing.h"
 #import "CodelessIndexer+Testing.h"
+#import "FBSDKAccessTokenExpirer+Testing.h"
 #import "FBSDKAccessToken+Internal.h"
 #import "FBSDKAppStoreReceiptProviding.h"
 #import "FBSDKAppEventsAtePublisher.h"
 #import "FBSDKAppEventsConfiguring.h"
 #import "FBSDKAppEventsFlushReason.h"
 #import "FBSDKAppEventsNumberParser.h"
+#import "FBSDKAppEventsUtility.h"
 #import "FBSDKAppEvents+AppEventsConfiguring.h"
 #import "FBSDKAppEvents+ApplicationActivating.h"
 #import "FBSDKAppEvents+ApplicationLifecycleObserving.h"
 #import "FBSDKAppEvents+ApplicationStateSetting.h"
+#import "FBSDKApplicationLifecycleNotifications.h"
+#import "FBSDKAppLinkUtility+Testing.h"
+#import "FBSDKAppURLSchemeProviding.h"
+#import "FBSDKInternalUtility+AppURLSchemeProviding.h"
 #import "FBSDKAtePublisherCreating.h"
 #import "FBSDKAtePublisherFactory.h"
 #import "FBSDKAuthenticationStatusUtility.h"
@@ -41,6 +49,8 @@
 #import "FBSDKBridgeAPIProtocolWebV1.h"
 #import "FBSDKBridgeAPIProtocolWebV2+Testing.h"
 #import "FBSDKBridgeAPIProtocolNativeV1.h"
+#import "FBSDKBridgeAPIResponseCreating.h"
+#import "FBSDKBridgeAPIResponseFactory.h"
 #import "FBSDKAdvertiserIDProviding.h"
 #import "FBSDKAppLinkEventPosting.h"
 #import "FBSDKBridgeAPI+Testing.h"
@@ -48,10 +58,11 @@
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKCrashObserver.h"
 #import "FBSDKCrashObserver+Internal.h"
-#import "FBSDKError.h"
+#import "FBSDKError+Testing.h"
 #import "FBSDKEventDeactivationManager.h"
 #import "FBSDKEventBinding+Testing.h"
 #import "FBSDKEventBindingManager+Testing.h"
+#import "FBSDKEventDeactivationManager+Testing.h"
 #import "FBSDKErrorReport.h"
 #import "FBSDKErrorReport+Testing.h"
 #import "FBSDKFeatureExtracting.h"
@@ -62,7 +73,7 @@
 #import "FBSDKIntegrityManager+Testing.h"
 #import "FBSDKModelManager+IntegrityParametersProcessorProvider.h"
 #import "FBSDKMath.h"
-#import "FBSDKModelManager.h"
+#import "FBSDKModelManager+Testing.h"
 #import "FBSDKModelUtility.h"
 #import "FBSDKModelManager+RulesFromKeyProvider.h"
 #import "FBSDKPasteboard.h"
@@ -86,6 +97,7 @@
 #import "PaymentProductRequestorFactory+Testing.h"
 #import "FBSDKProductRequestFactory.h"
 #import "SuggestedEventsIndexer+Testing.h"
+#import "UIApplication+URLOpener.h"
 #import "UserDefaultsSpy.h"
 #import "WebViewAppLinkResolver+Testing.h"
 #import "FBSDKConversionValueUpdating.h"
@@ -99,6 +111,7 @@
 // ErrorConfiguration Abstractions
 #import "FBSDKErrorConfigurationProviding.h"
 #import "FBSDKErrorConfigurationProvider.h"
+#import "FBSDKServerConfigurationLoading.h"
 // GraphRequestPiggybackManager Abstractions
 #import "FBSDKGraphRequestPiggybackManaging.h"
 #import "FBSDKGraphRequestPiggybackManagerProviding.h"
@@ -124,6 +137,7 @@
 #import "FBSDKAppEventsState.h"
 #import "FBSDKAppEventsStateManager.h"
 #import "FBSDKAppEventsStatePersisting.h"
+#import "FBSDKAppEventsStateProviding.h"
 // NotificationCenter
 #import "FBSDKNotificationProtocols.h"
 #import "NSNotificationCenter+Extensions.h"
@@ -148,7 +162,10 @@
 // PaymentObserver
 #import "FBSDKPaymentObserving.h"
 // TimeSpentData abstraction
+#import "FBSDKTimeSpentData+Testing.h"
 #import "FBSDKTimeSpentRecording.h"
+#import "FBSDKTimeSpentRecordingCreating.h"
+#import "FBSDKTimeSpentRecordingFactory.h"
 // Logging
 #import "FBSDKLogging.h"
 #import "FBSDKLogger+Logging.h"
@@ -278,13 +295,6 @@ NS_SWIFT_NAME(parse(result:error:));
 
 @end
 
-@interface FBSDKAppLinkUtility (Testing)
-
-@property (class, nonatomic, nullable) id<FBSDKGraphRequestProviding> requestProvider;
-@property (class, nonatomic, nullable) id<FBSDKInfoDictionaryProviding> infoDictionaryProvider;
-
-@end
-
 @interface FBSDKSettings (Testing)
 
 @property (class, nonatomic, nullable, readonly) id<FBSDKDataPersisting> store;
@@ -326,6 +336,9 @@ NS_SWIFT_NAME(configure(store:appEventsConfigurationProvider:infoDictionaryProvi
 @interface FBSDKGraphRequestPiggybackManager (Testing)
 
 @property (class, nonatomic, nullable) Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting> tokenWallet;
++ (id<FBSDKSettings>)settings;
++ (Class<FBSDKServerConfigurationProviding>)serverConfiguration;
++ (id<FBSDKGraphRequestProviding>)requestProvider;
 
 @end
 
@@ -403,12 +416,21 @@ NS_SWIFT_NAME(cachedAppLinks);
 
 @end
 
-@interface FBSDKError (Testing)
+// Hack to be able to test from Swift code that NSExceptions were raised.
+@interface XCTestCase (Testing)
 
-@property (class, nonatomic, readonly) BOOL isErrorReportEnabled;
-
-+ (void)reset;
+- (void)assertRaisesExceptionWithMessage:(NSString *)message block:(void (^)(void))block
+NS_SWIFT_NAME(assertRaisesException(message:block:));
 
 @end
+
+@implementation XCTestCase (Testing)
+
+- (void)assertRaisesExceptionWithMessage:(NSString *)message block:(void (^)(void))block  {
+  XCTAssertThrows(block(), @"%@", message);
+}
+
+@end
+
 
 NS_ASSUME_NONNULL_END

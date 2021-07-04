@@ -33,6 +33,7 @@
 #import "FBSDKAppEventsParameterProcessing.h"
 #import "FBSDKAppEventsState.h"
 #import "FBSDKAppEventsStatePersisting.h"
+#import "FBSDKAppEventsStateProviding.h"
 #import "FBSDKAppEventsUtility.h"
 #import "FBSDKAtePublisherCreating.h"
 #import "FBSDKAtePublishing.h"
@@ -42,6 +43,7 @@
 #import "FBSDKDataPersisting.h"
 #import "FBSDKDynamicFrameworkLoader.h"
 #import "FBSDKError.h"
+#import "FBSDKEventsProcessing.h"
 #import "FBSDKFeatureChecking.h"
 #import "FBSDKGateKeeperManaging.h"
 #import "FBSDKGraphRequestProtocol.h"
@@ -56,7 +58,7 @@
 #import "FBSDKServerConfigurationProviding.h"
 #import "FBSDKSettingsProtocol.h"
 #import "FBSDKSwizzling.h"
-#import "FBSDKTimeSpentRecording.h"
+#import "FBSDKTimeSpentRecordingCreating.h"
 #import "FBSDKUtility.h"
 
 #if !TARGET_OS_TV
@@ -119,7 +121,6 @@ FBSDKAppEventParameterName FBSDKAppEventParameterNamePaymentInfoAvailable = @"fb
 FBSDKAppEventParameterName FBSDKAppEventParameterNameNumItems = @"fb_num_items";
 FBSDKAppEventParameterName FBSDKAppEventParameterNameLevel = @"fb_level";
 FBSDKAppEventParameterName FBSDKAppEventParameterNameDescription = @"fb_description";
-FBSDKAppEventParameterName FBSDKAppEventParameterLaunchSource = @"fb_mobile_launch_source";
 FBSDKAppEventParameterName FBSDKAppEventParameterNameAdType = @"ad_type";
 FBSDKAppEventParameterName FBSDKAppEventParameterNameOrderID = @"fb_order_id";
 
@@ -277,10 +278,9 @@ static id<FBSDKFeatureChecking> g_featureChecker;
 static Class<FBSDKLogging> g_logger;
 static id<FBSDKSettings> g_settings;
 static id<FBSDKPaymentObserving> g_paymentObserver;
-static id<FBSDKTimeSpentRecording> g_timeSpentRecorder;
 static id<FBSDKAppEventsStatePersisting> g_appEventsStateStore;
-static id<FBSDKAppEventsParameterProcessing> g_eventDeactivationParameterProcessor;
-static id<FBSDKAppEventsParameterProcessing> g_restrictiveDataFilterParameterProcessor;
+static id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> g_eventDeactivationParameterProcessor;
+static id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> g_restrictiveDataFilterParameterProcessor;
 
 #if !TARGET_OS_TV
 static id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider> g_onDeviceMLModelManager = nil;
@@ -297,6 +297,8 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 @property (nonatomic, copy) NSString *userID;
 @property (nonatomic, strong) id<FBSDKAtePublishing> atePublisher;
 @property (nullable, nonatomic) Class<FBSDKSwizzling> swizzler;
+@property (nullable, nonatomic) id<FBSDKSourceApplicationTracking, FBSDKTimeSpentRecording> timeSpentRecorder;
+@property (nonatomic, strong) id<FBSDKAppEventsStateProviding> appEventsStateProvider;
 @property (nonatomic) BOOL isConfigured;
 
 @property (nonatomic, assign) BOOL disableTimer; // for testing only.
@@ -666,7 +668,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   // Restore time spent data, indicating that we're being called from "activateApp", which will,
   // when appropriate, result in logging an "activated app" and "deactivated app" (for the
   // previous session) App Event.
-  [g_timeSpentRecorder restore:YES];
+  [self.timeSpentRecorder restore:YES];
 }
 
 + (void)setPushNotificationsDeviceToken:(NSData *)deviceToken
@@ -886,11 +888,12 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
                                    logger:(Class<FBSDKLogging>)logger
                                  settings:(id<FBSDKSettings>)settings
                           paymentObserver:(id<FBSDKPaymentObserving>)paymentObserver
-                        timeSpentRecorder:(id<FBSDKTimeSpentRecording>)timeSpentRecorder
+                 timeSpentRecorderFactory:(id<FBSDKTimeSpentRecordingCreating>)timeSpentRecorderFactory
                       appEventsStateStore:(id<FBSDKAppEventsStatePersisting>)appEventsStateStore
-      eventDeactivationParameterProcessor:(id<FBSDKAppEventsParameterProcessing>)eventDeactivationParameterProcessor
-  restrictiveDataFilterParameterProcessor:(id<FBSDKAppEventsParameterProcessing>)restrictiveDataFilterParameterProcessor
+      eventDeactivationParameterProcessor:(id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>)eventDeactivationParameterProcessor
+  restrictiveDataFilterParameterProcessor:(id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>)restrictiveDataFilterParameterProcessor
                       atePublisherFactory:(id<FBSDKAtePublisherCreating>)atePublisherFactory
+                   appEventsStateProvider:(id<FBSDKAppEventsStateProviding>)appEventsStateProvider
                                  swizzler:(Class<FBSDKSwizzling>)swizzler
 {
   [FBSDKAppEvents setAppEventsConfigurationProvider:appEventsConfigurationProvider];
@@ -901,13 +904,14 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   [FBSDKAppEvents setFeatureChecker:featureChecker];
   g_settings = settings;
   g_paymentObserver = paymentObserver;
-  g_timeSpentRecorder = timeSpentRecorder;
   g_appEventsStateStore = appEventsStateStore;
   g_eventDeactivationParameterProcessor = eventDeactivationParameterProcessor;
   g_restrictiveDataFilterParameterProcessor = restrictiveDataFilterParameterProcessor;
   self.swizzler = swizzler;
   self.store = store;
   self.atePublisher = [atePublisherFactory createPublisherWithAppID:self.appID];
+  self.timeSpentRecorder = [timeSpentRecorderFactory createTimeSpentRecorder];
+  self.appEventsStateProvider = appEventsStateProvider;
 
   self.isConfigured = YES;
 
@@ -1125,12 +1129,29 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
       return;
     }
     FBSDKAppEventsState *copy = [_appEventsState copy];
-    _appEventsState = [[FBSDKAppEventsState alloc] initWithToken:copy.tokenString
-                                                           appID:copy.appID];
+    _appEventsState = [self.appEventsStateProvider createStateWithToken:copy.tokenString
+                                                                  appID:copy.appID];
     dispatch_async(dispatch_get_main_queue(), ^{
       [self flushOnMainQueue:copy forReason:flushReason];
     });
   }
+}
+
+#pragma mark - Source Application Tracking
+
+- (void)setSourceApplication:(NSString *)sourceApplication openURL:(NSURL *)url
+{
+  [self.timeSpentRecorder setSourceApplication:sourceApplication openURL:url];
+}
+
+- (void)setSourceApplication:(NSString *)sourceApplication isFromAppLink:(BOOL)isFromAppLink
+{
+  [self.timeSpentRecorder setSourceApplication:sourceApplication isFromAppLink:isFromAppLink];
+}
+
+- (void)registerAutoResetSourceApplication
+{
+  [self.timeSpentRecorder registerAutoResetSourceApplication];
 }
 
 #pragma mark - Private Methods
@@ -1415,19 +1436,19 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 
   @synchronized(self) {
     if (!_appEventsState) {
-      _appEventsState = [[FBSDKAppEventsState alloc] initWithToken:tokenString appID:appID];
+      _appEventsState = [self.appEventsStateProvider createStateWithToken:tokenString appID:appID];
     } else if (![_appEventsState isCompatibleWithTokenString:tokenString appID:appID]) {
       if (self.flushBehavior == FBSDKAppEventsFlushBehaviorExplicitOnly) {
         [g_appEventsStateStore persistAppEventsData:_appEventsState];
       } else {
         [self flushForReason:FBSDKAppEventsFlushReasonSessionChange];
       }
-      _appEventsState = [[FBSDKAppEventsState alloc] initWithToken:tokenString appID:appID];
+      _appEventsState = [self.appEventsStateProvider createStateWithToken:tokenString appID:appID];
     }
 
     [_appEventsState addEvent:eventDictionary isImplicit:isImplicitlyLogged];
     if (!isImplicitlyLogged) {
-      NSString *message = [NSString stringWithFormat:@"FBSDKAppEvents: Recording event @ %ld: %@",
+      NSString *message = [NSString stringWithFormat:@"FBSDKAppEvents: Recording event @ %f: %@",
                            [FBSDKAppEventsUtility unixTimeNow],
                            eventDictionary];
       [g_logger singleShotLogEntry:FBSDKLoggingBehaviorAppEvents
@@ -1458,8 +1479,8 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   // reduce lock time by creating a new FBSDKAppEventsState to collect matching persisted events.
   @synchronized(self) {
     if (_appEventsState) {
-      matchingEventsPreviouslySaved = [[FBSDKAppEventsState alloc] initWithToken:_appEventsState.tokenString
-                                                                           appID:_appEventsState.appID];
+      matchingEventsPreviouslySaved = [self.appEventsStateProvider createStateWithToken:_appEventsState.tokenString
+                                                                                  appID:_appEventsState.appID];
     }
   }
   for (FBSDKAppEventsState *saved in existingEventsStates) {
@@ -1537,7 +1558,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
       NSMutableDictionary *paramsForPrinting = [postParameters mutableCopy];
       [paramsForPrinting removeObjectForKey:@"custom_events_file"];
 
-      loggingEntry = [NSString stringWithFormat:@"FBSDKAppEvents: Flushed @ %ld, %lu events due to '%@' - %@\nEvents: %@",
+      loggingEntry = [NSString stringWithFormat:@"FBSDKAppEvents: Flushed @ %f, %lu events due to '%@' - %@\nEvents: %@",
                       [FBSDKAppEventsUtility unixTimeNow],
                       (unsigned long)appEventsState.events.count,
                       [FBSDKAppEventsUtility flushReasonToString:reason],
@@ -1635,7 +1656,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   [self checkPersistedEvents];
 
   // Restore time spent data, indicating that we're not being called from "activateApp".
-  [g_timeSpentRecorder restore:NO];
+  [self.timeSpentRecorder restore:NO];
 }
 
 - (void)applicationMovingFromActiveStateOrTerminating
@@ -1650,7 +1671,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   if (copy) {
     [g_appEventsStateStore persistAppEventsData:copy];
   }
-  [g_timeSpentRecorder suspend];
+  [self.timeSpentRecorder suspend];
 }
 
 #pragma mark - Configuration Validation
@@ -1778,11 +1799,6 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   g_paymentObserver = paymentObserver;
 }
 
-+ (id<FBSDKTimeSpentRecording>)timeSpentRecorder
-{
-  return g_timeSpentRecorder;
-}
-
 + (id<FBSDKAppEventsStatePersisting>)appEventsStateStore
 {
   return g_appEventsStateStore;
@@ -1805,12 +1821,12 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   return g_metadataIndexer;
 }
 
-+ (id<FBSDKAppEventsParameterProcessing>)eventDeactivationParameterProcessor
++ (id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>)eventDeactivationParameterProcessor
 {
   return g_eventDeactivationParameterProcessor;
 }
 
-+ (id<FBSDKAppEventsParameterProcessing>)restrictiveDataFilterParameterProcessor
++ (id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>)restrictiveDataFilterParameterProcessor
 {
   return g_restrictiveDataFilterParameterProcessor;
 }

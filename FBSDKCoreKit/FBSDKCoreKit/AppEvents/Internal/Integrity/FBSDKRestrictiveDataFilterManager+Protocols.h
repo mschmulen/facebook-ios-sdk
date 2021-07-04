@@ -16,14 +16,13 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <Foundation/Foundation.h>
+#import "FBSDKAppEventsParameterProcessing.h"
+#import "FBSDKEventsProcessing.h"
+#import "FBSDKRestrictiveDataFilterManager.h"
 
-@interface FBSDKLoginUtilityTests : NSObject
+NS_ASSUME_NONNULL_BEGIN
 
-/**
- *  Mocks the main NSBundle to return the bundle containing this class, instead
- * of the XCTest program bundle.
- */
-+ (id)mainBundleMock;
-
+@interface FBSDKRestrictiveDataFilterManager (AppEventsParameterProcessing) <FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>
 @end
+
+NS_ASSUME_NONNULL_END

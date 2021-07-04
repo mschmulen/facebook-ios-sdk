@@ -46,6 +46,9 @@
 - (id)objectForKey:(NSString *)defaultName
 {
   _capturedObjectRetrievalKey = defaultName;
+  NSMutableArray *tmp = [NSMutableArray arrayWithArray:_capturedObjectRetrievalKeys.copy];
+  [tmp addObject:defaultName];
+  _capturedObjectRetrievalKeys = tmp;
   return [_capturedValues objectForKey:defaultName];
 }
 
@@ -60,6 +63,10 @@
   }
 
   _capturedValues = tmp;
+
+  NSMutableArray *keys = [NSMutableArray arrayWithArray:_capturedSetObjectKeys.copy];
+  [keys addObject:defaultName];
+  _capturedSetObjectKeys = keys;
   _capturedSetObjectKey = defaultName;
 }
 

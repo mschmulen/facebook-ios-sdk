@@ -17,7 +17,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import <Foundation/Foundation.h>
-#import <OCMock/OCMock.h>
+#import <SafariServices/SafariServices.h>
 #import <XCTest/XCTest.h>
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
@@ -29,6 +29,10 @@
 @property FBSDKBridgeAPI *api;
 @property id partialMock;
 @property (readonly) NSURL *sampleUrl;
+@property (nonatomic) TestURLOpener *urlOpener;
+@property (nonatomic) TestBridgeApiResponseFactory *bridgeAPIResponseFactory;
+@property (nonatomic) TestDylibResolver *frameworkLoader;
+@property (nonatomic) TestAppURLSchemeProvider *appURLSchemeProvider;
 
 @end
 
@@ -38,36 +42,23 @@
 {
   [super setUp];
 
-  _api = [[FBSDKBridgeAPI alloc] initWithProcessInfo:[TestProcessInfo new]];
-  _partialMock = OCMPartialMock(self.api);
-
-  OCMStub(
-    [_partialMock _bridgeAPIRequestCompletionBlockWithRequest:OCMArg.any
-                                                   completion:OCMArg.any]
-  );
-  OCMStub(
-    [_partialMock openURLWithSafariViewController:OCMArg.any
-                                           sender:OCMArg.any
-                               fromViewController:OCMArg.any
-                                          handler:OCMArg.any]
-  );
-  OCMStub([_partialMock openURL:OCMArg.any sender:OCMArg.any handler:OCMArg.any]);
-}
-
-- (void)tearDown
-{
-  _api = nil;
-
-  [_partialMock stopMocking];
-  _partialMock = nil;
-
-  [super tearDown];
+  _urlOpener = [[TestURLOpener alloc] initWithCanOpenUrl:YES];
+  _bridgeAPIResponseFactory = [TestBridgeApiResponseFactory new];
+  _frameworkLoader = [TestDylibResolver new];
+  _appURLSchemeProvider = [TestAppURLSchemeProvider new];
+  _api = [[FBSDKBridgeAPI alloc] initWithProcessInfo:[TestProcessInfo new]
+                                              logger:[TestLogger new]
+                                           urlOpener:self.urlOpener
+                            bridgeAPIResponseFactory:self.bridgeAPIResponseFactory
+                                     frameworkLoader:self.frameworkLoader
+                                appURLSchemeProvider:self.appURLSchemeProvider];
 }
 
 // MARK: - Url Opening
 
 - (void)testOpeningBridgeRequestWithRequestUrlUsingSafariVcWithFromVc
 {
+  self.frameworkLoader.stubSafariViewControllerClass = SFSafariViewController.class;
   ViewControllerSpy *spy = [ViewControllerSpy makeDefaultSpy];
   TestBridgeApiRequest *request = [TestBridgeApiRequest requestWithURL:self.sampleUrl];
   [self.api openBridgeAPIRequest:request
@@ -77,20 +68,25 @@
 
   XCTAssertEqualObjects(self.api.pendingRequest, request);
   XCTAssertEqualObjects(self.api.pendingRequestCompletionBlock, self.uninvokedCompletionHandler);
-  OCMVerify(
-    [_partialMock _bridgeAPIRequestCompletionBlockWithRequest:request
-                                                   completion:self.uninvokedCompletionHandler]
+
+  XCTAssertNil(
+    self.bridgeAPIResponseFactory.capturedResponseURL,
+    "Should not create a bridge response"
   );
-  OCMVerify(
-    [_partialMock openURLWithSafariViewController:self.sampleUrl
-                                           sender:nil
-                               fromViewController:spy
-                                          handler:OCMArg.any]
+  XCTAssertTrue(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should try and load the safari view controller class"
+  );
+  XCTAssertEqualObjects(
+    self.api.safariViewController.delegate,
+    self.api,
+    "Should create a safari controller with the bridge as its delegate"
   );
 }
 
 - (void)testOpeningBridgeRequestWithRequestUrlUsingSafariVcWithoutFromVc
 {
+  self.frameworkLoader.stubSafariViewControllerClass = SFSafariViewController.class;
   TestBridgeApiRequest *request = [TestBridgeApiRequest requestWithURL:self.sampleUrl];
   [self.api openBridgeAPIRequest:request
          useSafariViewController:YES
@@ -99,20 +95,20 @@
 
   XCTAssertEqualObjects(self.api.pendingRequest, request);
   XCTAssertEqualObjects(self.api.pendingRequestCompletionBlock, self.uninvokedCompletionHandler);
-  OCMVerify(
-    [_partialMock _bridgeAPIRequestCompletionBlockWithRequest:request
-                                                   completion:self.uninvokedCompletionHandler]
+
+  XCTAssertTrue(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should try and load the safari view controller class"
   );
-  OCMVerify(
-    [_partialMock openURLWithSafariViewController:self.sampleUrl
-                                           sender:nil
-                               fromViewController:nil
-                                          handler:OCMArg.any]
+  XCTAssertEqualObjects(
+    self.api.logger.contents,
+    @"There are no valid ViewController to present SafariViewController with"
   );
 }
 
 - (void)testOpeningBridgeRequestWithRequestUrlNotUsingSafariVcWithFromVc
 {
+  self.frameworkLoader.stubSafariViewControllerClass = SFSafariViewController.class;
   ViewControllerSpy *spy = [ViewControllerSpy makeDefaultSpy];
   TestBridgeApiRequest *request = [TestBridgeApiRequest requestWithURL:self.sampleUrl];
   [self.api openBridgeAPIRequest:request
@@ -122,11 +118,11 @@
 
   XCTAssertEqualObjects(self.api.pendingRequest, request);
   XCTAssertEqualObjects(self.api.pendingRequestCompletionBlock, self.uninvokedCompletionHandler);
-  OCMVerify(
-    [_partialMock _bridgeAPIRequestCompletionBlockWithRequest:request
-                                                   completion:self.uninvokedCompletionHandler]
+
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when safari is not requested"
   );
-  OCMVerify([_partialMock openURL:self.sampleUrl sender:nil handler:OCMArg.any]);
 }
 
 - (void)testOpeningBridgeRequestWithRequestUrlNotUsingSafariVcWithoutFromVc
@@ -139,11 +135,11 @@
 
   XCTAssertEqualObjects(self.api.pendingRequest, request);
   XCTAssertEqualObjects(self.api.pendingRequestCompletionBlock, self.uninvokedCompletionHandler);
-  OCMVerify(
-    [_partialMock _bridgeAPIRequestCompletionBlockWithRequest:request
-                                                   completion:self.uninvokedCompletionHandler]
+
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when safari is not requested"
   );
-  OCMVerify([_partialMock openURL:self.sampleUrl sender:nil handler:OCMArg.any]);
 }
 
 - (void)testOpeningBridgeRequestWithoutRequestUrlUsingSafariVcWithFromVc
@@ -161,11 +157,20 @@
       "Should call the completion with an error if the request cannot provide a url"
     );
   };
-  [self rejectApiOpeningBridgeRequest];
+
   [self.api openBridgeAPIRequest:request
          useSafariViewController:YES
               fromViewController:spy
                  completionBlock:completionHandler];
+
+  XCTAssertNil(
+    self.urlOpener.capturedOpenUrl,
+    "Should not try to open a url when the request cannot provide one"
+  );
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when the request cannot provide a url"
+  );
   [self assertPendingPropertiesNotSet];
 }
 
@@ -183,11 +188,18 @@
       "Should call the completion with an error if the request cannot provide a url"
     );
   };
-  [self rejectApiOpeningBridgeRequest];
   [self.api openBridgeAPIRequest:request
          useSafariViewController:YES
               fromViewController:nil
                  completionBlock:completionHandler];
+  XCTAssertNil(
+    self.urlOpener.capturedOpenUrl,
+    "Should not try to open a url when the request cannot provide one"
+  );
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when the request cannot provide a url"
+  );
   [self assertPendingPropertiesNotSet];
 }
 
@@ -206,11 +218,18 @@
       "Should call the completion with an error if the request cannot provide a url"
     );
   };
-  [self rejectApiOpeningBridgeRequest];
   [self.api openBridgeAPIRequest:request
          useSafariViewController:NO
               fromViewController:spy
                  completionBlock:completionHandler];
+  XCTAssertNil(
+    self.urlOpener.capturedOpenUrl,
+    "Should not try to open a url when the request cannot provide one"
+  );
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when the request cannot provide a url"
+  );
   [self assertPendingPropertiesNotSet];
 }
 
@@ -228,27 +247,22 @@
       "Should call the completion with an error if the request cannot provide a url"
     );
   };
-  [self rejectApiOpeningBridgeRequest];
   [self.api openBridgeAPIRequest:request
          useSafariViewController:NO
               fromViewController:nil
                  completionBlock:completionHandler];
+  XCTAssertNil(
+    self.urlOpener.capturedOpenUrl,
+    "Should not try to open a url when the request cannot provide one"
+  );
+  XCTAssertFalse(
+    self.frameworkLoader.didLoadSafariViewControllerClass,
+    "Should not try and load the safari view controller class when the request cannot provide a url"
+  );
   [self assertPendingPropertiesNotSet];
 }
 
 // MARK: - Helpers
-
-- (void)rejectApiOpeningBridgeRequest
-{
-  OCMReject([_partialMock _bridgeAPIRequestCompletionBlockWithRequest:OCMArg.any completion:OCMArg.any]);
-  OCMReject([_partialMock openURL:OCMArg.any sender:OCMArg.any handler:OCMArg.any]);
-  OCMReject(
-    [_partialMock openURLWithSafariViewController:OCMArg.any
-                                           sender:OCMArg.any
-                               fromViewController:OCMArg.any
-                                          handler:OCMArg.any]
-  );
-}
 
 - (void)assertPendingPropertiesNotSet
 {

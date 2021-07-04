@@ -29,7 +29,6 @@
  #import "FBSDKGraphRequestProviding.h"
  #import "FBSDKSettings.h"
  #import "FBSDKURL.h"
- #import "FBSDKUtility.h"
 
 static NSString *const FBSDKLastDeferredAppLink = @"com.facebook.sdk:lastDeferredAppLink%@";
 static NSString *const FBSDKDeferredAppLinkEvent = @"DEFERRED_APP_LINK";
@@ -160,6 +159,11 @@ static BOOL _isConfigured;
 
  #if DEBUG
   #if FBSDKTEST
+
++ (void)reset
+{
+  _isConfigured = NO;
+}
 
 + (id<FBSDKGraphRequestProviding>)requestProvider
 {

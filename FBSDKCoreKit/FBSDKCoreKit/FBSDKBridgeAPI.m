@@ -23,10 +23,14 @@
  #import "FBSDKBridgeAPI.h"
 
  #import "FBSDKApplicationLifecycleNotifications.h"
+ #import "FBSDKBridgeAPIResponseCreating.h"
+ #import "FBSDKBridgeAPIResponseFactory.h"
  #import "FBSDKContainerViewController.h"
  #import "FBSDKCoreKit+Internal.h"
+ #import "FBSDKInternalUtility+AppURLSchemeProviding.h"
  #import "FBSDKOperatingSystemVersionComparing.h"
  #import "NSProcessInfo+Protocols.h"
+ #import "UIApplication+URLOpener.h"
 
 /**
  Specifies state of FBSDKAuthenticationSession (SFAuthenticationSession (iOS 11) and ASWebAuthenticationSession (iOS 12+))
@@ -62,6 +66,10 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
  #endif
 
 @property (nonnull, nonatomic) FBSDKLogger *logger;
+@property (nonatomic, readonly) id<FBSDKURLOpener> urlOpener;
+@property (nonatomic, readonly) id<FBSDKBridgeAPIResponseCreating> bridgeAPIResponseFactory;
+@property (nonatomic, readonly) id<FBSDKDynamicFrameworkResolving> frameworkLoader;
+@property (nonatomic, readonly) id<FBSDKAppURLSchemeProviding> appURLSchemeProvider;
 
 @end
 
@@ -86,16 +94,30 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   static FBSDKBridgeAPI *_sharedInstance;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
-    _sharedInstance = [[self alloc] initWithProcessInfo:NSProcessInfo.processInfo];
+    _sharedInstance = [[self alloc] initWithProcessInfo:NSProcessInfo.processInfo
+                                                 logger:[[FBSDKLogger alloc] initWithLoggingBehavior:FBSDKLoggingBehaviorDeveloperErrors]
+                                              urlOpener:UIApplication.sharedApplication
+                               bridgeAPIResponseFactory:[FBSDKBridgeAPIResponseFactory new]
+                                        frameworkLoader:FBSDKDynamicFrameworkLoader.shared
+                                   appURLSchemeProvider:FBSDKInternalUtility.sharedUtility];
   });
   return _sharedInstance;
 }
 
 - (instancetype)initWithProcessInfo:(id<FBSDKOperatingSystemVersionComparing>)processInfo
+                             logger:(FBSDKLogger *)logger
+                          urlOpener:(id<FBSDKURLOpener>)urlOpener
+           bridgeAPIResponseFactory:(id<FBSDKBridgeAPIResponseCreating>)bridgeAPIResponseFactory
+                    frameworkLoader:(id<FBSDKDynamicFrameworkResolving>)frameworkLoader
+               appURLSchemeProvider:(nonnull id<FBSDKAppURLSchemeProviding>)appURLSchemeProvider;
 {
   if ((self = [super init])) {
     _processInfo = processInfo;
-    _logger = [[FBSDKLogger alloc] initWithLoggingBehavior:FBSDKLoggingBehaviorDeveloperErrors];
+    _logger = logger;
+    _urlOpener = urlOpener;
+    _bridgeAPIResponseFactory = bridgeAPIResponseFactory;
+    _frameworkLoader = frameworkLoader;
+    _appURLSchemeProvider = appURLSchemeProvider;
   }
   return self;
 }
@@ -271,20 +293,25 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   _expectingBackground = YES;
   _pendingURLOpen = sender;
   __block id<FBSDKOperatingSystemVersionComparing> weakProcessInfo = _processInfo;
-  dispatch_async(dispatch_get_main_queue(), ^{
+  dispatch_block_t block = ^{
     // Dispatch openURL calls to prevent hangs if we're inside the current app delegate's openURL flow already
     NSOperatingSystemVersion iOS10Version = { .majorVersion = 10, .minorVersion = 0, .patchVersion = 0 };
     if ([weakProcessInfo isOperatingSystemAtLeastVersion:iOS10Version]) {
       if (@available(iOS 10.0, *)) {
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:^(BOOL success) {
+        [self.urlOpener openURL:url options:@{} completionHandler:^(BOOL success) {
           handler(success, nil);
         }];
       }
     } else if (handler) {
-      BOOL opened = [UIApplication.sharedApplication openURL:url];
+      BOOL opened = [self.urlOpener openURL:url];
       handler(opened, nil);
     }
-  });
+  };
+#if FBSDKTEST
+  block();
+#else
+  dispatch_async(dispatch_get_main_queue(), block);
+#endif
 }
 
  #pragma clang diagnostic pop
@@ -300,7 +327,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   NSError *error;
   NSURL *requestURL = [request requestURL:&error];
   if (!requestURL) {
-    FBSDKBridgeAPIResponse *response = [FBSDKBridgeAPIResponse bridgeAPIResponseWithRequest:request error:error];
+    FBSDKBridgeAPIResponse *response = [self.bridgeAPIResponseFactory createResponseWithRequest:request error:error];
     completionBlock(response);
     return;
   }
@@ -308,6 +335,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   _pendingRequestCompletionBlock = [completionBlock copy];
   FBSDKSuccessBlock handler = [self _bridgeAPIRequestCompletionBlockWithRequest:request
                                                                      completion:completionBlock];
+
   if (useSafariViewController) {
     [self openURLWithSafariViewController:requestURL sender:nil fromViewController:fromViewController handler:handler];
   } else {
@@ -330,8 +358,8 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
         openedURLError = [FBSDKError errorWithCode:FBSDKErrorAppVersionUnsupported
                                            message:@"the app switch failed because the destination app is out of date"];
       }
-      FBSDKBridgeAPIResponse *response = [FBSDKBridgeAPIResponse bridgeAPIResponseWithRequest:request
-                                                                                        error:openedURLError];
+      FBSDKBridgeAPIResponse *response = [self.bridgeAPIResponseFactory createResponseWithRequest:request
+                                                                                            error:openedURLError];
       completionBlock(response);
       return;
     }
@@ -342,19 +370,6 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
                                  sender:(id<FBSDKURLOpening>)sender
                      fromViewController:(UIViewController *)fromViewController
                                 handler:(FBSDKSuccessBlock)handler
-{
-  [self _openURLWithSafariViewController:url
-                                  sender:sender
-                      fromViewController:fromViewController
-                                 handler:handler
-                           dylibResolver:FBSDKDynamicFrameworkLoader.shared];
-}
-
-- (void)_openURLWithSafariViewController:(NSURL *)url
-                                  sender:(id<FBSDKURLOpening>)sender
-                      fromViewController:(UIViewController *)fromViewController
-                                 handler:(FBSDKSuccessBlock)handler
-                           dylibResolver:(id<FBSDKDynamicFrameworkResolving>)dylibResolver
 {
   if (![url.scheme hasPrefix:@"http"]) {
     [self openURL:url sender:sender handler:handler];
@@ -375,7 +390,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   // trying to dynamically load SFSafariViewController class
   // so for the cases when it is available we can send users through Safari View Controller flow
   // in cases it is not available regular flow will be selected
-  Class SFSafariViewControllerClass = dylibResolver.safariViewControllerClass;
+  Class SFSafariViewControllerClass = self.frameworkLoader.safariViewControllerClass;
 
   if (SFSafariViewControllerClass) {
     UIViewController *parent = fromViewController ?: [FBSDKInternalUtility topMostViewController];
@@ -433,7 +448,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
       [_authenticationSession cancel];
     }
     _authenticationSession = [[AuthenticationSessionClass alloc] initWithURL:url
-                                                           callbackURLScheme:[FBSDKInternalUtility appURLScheme]
+                                                           callbackURLScheme:self.appURLSchemeProvider.appURLScheme
                                                            completionHandler:_authenticationSessionCompletionHandler];
     if (@available(iOS 13.0, *)) {
       if ([_authenticationSession respondsToSelector:@selector(setPresentationContextProvider:)]) {
@@ -505,7 +520,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   FBSDKBridgeAPIResponseBlock completionBlock = _pendingRequestCompletionBlock;
   _pendingRequest = nil;
   _pendingRequestCompletionBlock = NULL;
-  if (![responseURL.scheme isEqualToString:[FBSDKInternalUtility appURLScheme]]) {
+  if (![responseURL.scheme isEqualToString:[self.appURLSchemeProvider appURLScheme]]) {
     return NO;
   }
   if (![responseURL.host isEqualToString:@"bridge"]) {
@@ -518,17 +533,22 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
     return YES;
   }
   NSError *error;
-  FBSDKBridgeAPIResponse *response = [FBSDKBridgeAPIResponse bridgeAPIResponseWithRequest:request
-                                                                              responseURL:responseURL
-                                                                        sourceApplication:sourceApplication
-                                                                                    error:&error];
+  FBSDKBridgeAPIResponse *response = [self.bridgeAPIResponseFactory createResponseWithRequest:request
+                                                                                  responseURL:responseURL
+                                                                            sourceApplication:sourceApplication
+                                                                                        error:&error];
   if (response) {
     completionBlock(response);
     return YES;
   } else if (error) {
-    completionBlock([FBSDKBridgeAPIResponse bridgeAPIResponseWithRequest:request error:error]);
-    return YES;
+    if (error.code == FBSDKErrorBridgeAPIResponse) {
+      return NO;
+    } else {
+      completionBlock([self.bridgeAPIResponseFactory createResponseWithRequest:request error:error]);
+      return YES;
+    }
   } else {
+    // This should not be reachable anymore.
     return NO;
   }
 }

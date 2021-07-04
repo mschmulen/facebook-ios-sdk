@@ -22,13 +22,17 @@
 #import <objc/runtime.h>
 
 #import "FBSDKAccessToken+Internal.h"
+#import "FBSDKAccessTokenExpirer.h"
 #import "FBSDKAppEvents+AppEventsConfiguring.h"
 #import "FBSDKAppEvents+ApplicationActivating.h"
 #import "FBSDKAppEvents+ApplicationLifecycleObserving.h"
 #import "FBSDKAppEvents+ApplicationStateSetting.h"
 #import "FBSDKAppEvents+EventLogging.h"
 #import "FBSDKAppEvents+Internal.h"
+#import "FBSDKAppEvents+SourceApplicationTracking.h"
 #import "FBSDKAppEventsConfigurationManager.h"
+#import "FBSDKAppEventsState.h"
+#import "FBSDKAppEventsStateFactory.h"
 #import "FBSDKAppEventsStateManager+AppEventsStatePersisting.h"
 #import "FBSDKAppEventsUtility+AdvertiserIDProviding.h"
 #import "FBSDKApplicationLifecycleObserving.h"
@@ -38,13 +42,12 @@
 #import "FBSDKAuthenticationToken+Internal.h"
 #import "FBSDKBridgeAPI+ApplicationObserving.h"
 #import "FBSDKButton+Subclass.h"
-#import "FBSDKConstants.h"
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKCrashShield+Internal.h"
 #import "FBSDKDynamicFrameworkLoader.h"
 #import "FBSDKError.h"
-#import "FBSDKEventDeactivationManager.h"
-#import "FBSDKEventDeactivationManager+AppEventsParameterProcessing.h"
+#import "FBSDKErrorReport+ErrorReporting.h"
+#import "FBSDKEventDeactivationManager+Protocols.h"
 #import "FBSDKFeatureManager+FeatureChecking.h"
 #import "FBSDKFeatureManager+FeatureDisabling.h"
 #import "FBSDKGateKeeperManager.h"
@@ -56,7 +59,7 @@
 #import "FBSDKPaymentObserver.h"
 #import "FBSDKPaymentObserver+PaymentObserving.h"
 #import "FBSDKProfileProtocols.h"
-#import "FBSDKRestrictiveDataFilterManager+AppEventsParameterProcessing.h"
+#import "FBSDKRestrictiveDataFilterManager+Protocols.h"
 #import "FBSDKServerConfiguration.h"
 #import "FBSDKServerConfigurationManager+ServerConfigurationProviding.h"
 #import "FBSDKSettings+Internal.h"
@@ -64,8 +67,7 @@
 #import "FBSDKSettings+SettingsProtocols.h"
 #import "FBSDKSettingsLogging.h"
 #import "FBSDKSwizzler+Swizzling.h"
-#import "FBSDKTimeSpentData.h"
-#import "FBSDKTimeSpentData+TimeSpentRecording.h"
+#import "FBSDKTimeSpentRecordingFactory.h"
 #import "FBSDKTokenCache.h"
 #import "GraphAPI/FBSDKGraphRequest.h"
 #import "NSNotificationCenter+Extensions.h"
@@ -74,6 +76,8 @@
 #if !TARGET_OS_TV
  #import "FBSDKAEMReporter+Internal.h"
  #import "FBSDKAppLinkUtility+Internal.h"
+ #import "FBSDKBackgroundEventLogger.h"
+ #import "FBSDKBackgroundEventLogging.h"
  #import "FBSDKCodelessIndexer+Internal.h"
  #import "FBSDKContainerViewController.h"
  #import "FBSDKFeatureExtractor.h"
@@ -103,13 +107,15 @@ static UIApplicationState _applicationState;
 @property (nonnull, nonatomic, readonly) id<FBSDKSettingsLogging, FBSDKSettings> settings;
 @property (nonnull, nonatomic, readonly) id<FBSDKNotificationObserving> notificationObserver;
 @property (nonnull, nonatomic, readonly) NSHashTable<id<FBSDKApplicationObserving>> *applicationObservers;
-@property (nonnull, nonatomic, readonly) id<FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging> appEvents;
+@property (nonnull, nonatomic, readonly) id<FBSDKSourceApplicationTracking, FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging> appEvents;
 @property (nonnull, nonatomic, readonly) Class<FBSDKServerConfigurationProviding> serverConfigurationProvider;
 @property (nonnull, nonatomic, readonly) id<FBSDKDataPersisting> store;
 @property (nonnull, nonatomic, readonly) Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting> authenticationTokenWallet;
+@property (nonnull, nonatomic, readonly) FBSDKAccessTokenExpirer *accessTokenExpirer;
 
 #if !TARGET_OS_TV
 @property (nonnull, nonatomic, readonly) Class<FBSDKProfileProviding> profileProvider;
+@property (nonnull, nonatomic, readonly) id<FBSDKBackgroundEventLogging> backgroundEventLogger;
 #endif
 
 @property (nonatomic) BOOL isAppLaunched;
@@ -140,40 +146,43 @@ static UIApplicationState _applicationState;
 - (instancetype)init
 {
 #if TARGET_OS_TV
-  return [self initWithNotificationObserver:NSNotificationCenter.defaultCenter
-                                tokenWallet:FBSDKAccessToken.class
-                                   settings:FBSDKSettings.sharedSettings
-                             featureChecker:FBSDKFeatureManager.shared
-                                  appEvents:FBSDKAppEvents.singleton
-                serverConfigurationProvider:FBSDKServerConfigurationManager.class
-                                      store:NSUserDefaults.standardUserDefaults
-                  authenticationTokenWallet:FBSDKAuthenticationToken.class];
+  return [self initWithNotificationCenter:NSNotificationCenter.defaultCenter
+                              tokenWallet:FBSDKAccessToken.class
+                                 settings:FBSDKSettings.sharedSettings
+                           featureChecker:FBSDKFeatureManager.shared
+                                appEvents:FBSDKAppEvents.singleton
+              serverConfigurationProvider:FBSDKServerConfigurationManager.class
+                                    store:NSUserDefaults.standardUserDefaults
+                authenticationTokenWallet:FBSDKAuthenticationToken.class];
 #else
-  return [self initWithNotificationObserver:NSNotificationCenter.defaultCenter
-                                tokenWallet:FBSDKAccessToken.class
-                                   settings:FBSDKSettings.sharedSettings
-                             featureChecker:FBSDKFeatureManager.shared
-                                  appEvents:FBSDKAppEvents.singleton
-                serverConfigurationProvider:FBSDKServerConfigurationManager.class
-                                      store:NSUserDefaults.standardUserDefaults
-                  authenticationTokenWallet:FBSDKAuthenticationToken.class
-                            profileProvider:FBSDKProfile.class];
+  FBSDKBackgroundEventLogger *backgroundEventLogger = [[FBSDKBackgroundEventLogger alloc] initWithInfoDictionaryProvider:NSBundle.mainBundle
+                                                                                                             eventLogger:FBSDKAppEvents.singleton];
+  return [self initWithNotificationCenter:NSNotificationCenter.defaultCenter
+                              tokenWallet:FBSDKAccessToken.class
+                                 settings:FBSDKSettings.sharedSettings
+                           featureChecker:FBSDKFeatureManager.shared
+                                appEvents:FBSDKAppEvents.singleton
+              serverConfigurationProvider:FBSDKServerConfigurationManager.class
+                                    store:NSUserDefaults.standardUserDefaults
+                authenticationTokenWallet:FBSDKAuthenticationToken.class
+                          profileProvider:FBSDKProfile.class
+                    backgroundEventLogger:backgroundEventLogger];
 #endif
 }
 
 #if TARGET_OS_TV
-- (instancetype)initWithNotificationObserver:(id<FBSDKNotificationObserving>)observer
-                                 tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
-                                    settings:(id<FBSDKSettingsLogging, FBSDKSettings>)settings
-                              featureChecker:(id<FBSDKFeatureChecking>)featureChecker
-                                   appEvents:(id<FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
-                 serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
-                                       store:(id<FBSDKDataPersisting>)store
-                   authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
+- (instancetype)initWithNotificationCenter:(id<FBSDKNotificationObserving, FBSDKNotificationPosting>)notificationCenter
+                               tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
+                                  settings:(id<FBSDKSettingsLogging, FBSDKSettings>)settings
+                            featureChecker:(id<FBSDKFeatureChecking>)featureChecker
+                                 appEvents:(id<FBSDKSourceApplicationTracking, FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
+               serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
+                                     store:(id<FBSDKDataPersisting>)store
+                 authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
 {
   if ((self = [super init]) != nil) {
     _applicationObservers = [NSHashTable new];
-    _notificationObserver = observer;
+    _notificationObserver = notificationCenter;
     _tokenWallet = tokenWallet;
     _settings = settings;
     _featureChecker = featureChecker;
@@ -181,24 +190,26 @@ static UIApplicationState _applicationState;
     _serverConfigurationProvider = serverConfigurationProvider;
     _store = store;
     _authenticationTokenWallet = authenticationTokenWallet;
+    _accessTokenExpirer = [[FBSDKAccessTokenExpirer alloc] initWithNotificationCenter:notificationCenter];
   }
   return self;
 }
 
 #else
-- (instancetype)initWithNotificationObserver:(id<FBSDKNotificationObserving>)observer
-                                 tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
-                                    settings:(id<FBSDKSettingsLogging, FBSDKSettings>)settings
-                              featureChecker:(id<FBSDKFeatureChecking>)featureChecker
-                                   appEvents:(id<FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
-                 serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
-                                       store:(id<FBSDKDataPersisting>)store
-                   authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
-                             profileProvider:(Class<FBSDKProfileProviding>)profileProvider
+- (instancetype)initWithNotificationCenter:(id<FBSDKNotificationObserving, FBSDKNotificationPosting>)notificationCenter
+                               tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
+                                  settings:(id<FBSDKSettingsLogging, FBSDKSettings>)settings
+                            featureChecker:(id<FBSDKFeatureChecking>)featureChecker
+                                 appEvents:(id<FBSDKSourceApplicationTracking, FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
+               serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
+                                     store:(id<FBSDKDataPersisting>)store
+                 authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
+                           profileProvider:(Class<FBSDKProfileProviding>)profileProvider
+                     backgroundEventLogger:(id<FBSDKBackgroundEventLogging>)backgroundEventLogger
 {
   if ((self = [super init]) != nil) {
     _applicationObservers = [NSHashTable new];
-    _notificationObserver = observer;
+    _notificationObserver = notificationCenter;
     _tokenWallet = tokenWallet;
     _settings = settings;
     _featureChecker = featureChecker;
@@ -207,6 +218,8 @@ static UIApplicationState _applicationState;
     _store = store;
     _authenticationTokenWallet = authenticationTokenWallet;
     _profileProvider = profileProvider;
+    _backgroundEventLogger = backgroundEventLogger;
+    _accessTokenExpirer = [[FBSDKAccessTokenExpirer alloc] initWithNotificationCenter:notificationCenter];
   }
   return self;
 }
@@ -253,15 +266,16 @@ static UIApplicationState _applicationState;
   }];
 
 #if !TARGET_OS_TV
+  [self.backgroundEventLogger logBackgroundRefresStatus:[UIApplication.sharedApplication backgroundRefreshStatus]];
   // Register Listener for App Link measurement events
   [FBSDKMeasurementEventListener defaultListener];
   [self _logIfAutoAppLinkEnabled];
 #endif
   // Set the SourceApplication for time spent data. This is not going to update the value if the app has already launched.
-  [FBSDKTimeSpentData setSourceApplication:launchOptions[UIApplicationLaunchOptionsSourceApplicationKey]
-                                   openURL:launchOptions[UIApplicationLaunchOptionsURLKey]];
+  [self.appEvents setSourceApplication:launchOptions[UIApplicationLaunchOptionsSourceApplicationKey]
+                               openURL:launchOptions[UIApplicationLaunchOptionsURLKey]];
   // Register on UIApplicationDidEnterBackgroundNotification events to reset source application data when app backgrounds.
-  [FBSDKTimeSpentData registerAutoResetSourceApplication];
+  [self.appEvents registerAutoResetSourceApplication];
 
   [FBSDKInternalUtility validateFacebookReservedURLSchemes];
 }
@@ -318,7 +332,7 @@ static UIApplicationState _applicationState;
                                    reason:@"Expected 'sourceApplication' to be NSString. Please verify you are passing in 'sourceApplication' from your app delegate (not the UIApplication* parameter). If your app delegate implements iOS 9's application:openURL:options:, you should pass in options[UIApplicationOpenURLOptionsSourceApplicationKey]. "
                                  userInfo:nil];
   }
-  [FBSDKTimeSpentData setSourceApplication:sourceApplication openURL:url];
+  [self.appEvents setSourceApplication:sourceApplication openURL:url];
 
 #if !TARGET_OS_TV
   [self.featureChecker checkFeature:FBSDKFeatureAEM completionBlock:^(BOOL enabled) {
@@ -567,7 +581,7 @@ static UIApplicationState _applicationState;
   id<FBSDKDataPersisting> store = NSUserDefaults.standardUserDefaults;
   id<FBSDKGraphRequestConnectionProviding> connectionProvider = [FBSDKGraphRequestConnectionFactory new];
   id<FBSDKSettings> sharedSettings = FBSDKSettings.sharedSettings;
-  [FBSDKRestrictiveDataFilterManager setDefaultServerConfigurationProvider:FBSDKServerConfigurationManager.class];
+
   [FBSDKSettings configureWithStore:store
      appEventsConfigurationProvider:FBSDKAppEventsConfigurationManager.class
              infoDictionaryProvider:NSBundle.mainBundle
@@ -585,6 +599,12 @@ static UIApplicationState _applicationState;
   FBSDKAtePublisherFactory *atePublisherFactory = [[FBSDKAtePublisherFactory alloc] initWithStore:store
                                                                               graphRequestFactory:graphRequestProvider
                                                                                          settings:sharedSettings];
+  FBSDKTimeSpentRecordingFactory *timeSpentRecordingFactory
+    = [[FBSDKTimeSpentRecordingFactory alloc] initWithEventLogger:self.appEvents
+                                      serverConfigurationProvider:FBSDKServerConfigurationManager.class];
+  FBSDKEventDeactivationManager *eventDeactivationManager = [FBSDKEventDeactivationManager new];
+  FBSDKRestrictiveDataFilterManager *restrictiveDataFilterManager = [[FBSDKRestrictiveDataFilterManager alloc] initWithServerConfigurationProvider:FBSDKServerConfigurationManager.class];
+  [FBSDKAppEventsState configureWithEventProcessors:@[eventDeactivationManager, restrictiveDataFilterManager]];
   [self.appEvents configureWithGateKeeperManager:FBSDKGateKeeperManager.class
                   appEventsConfigurationProvider:FBSDKAppEventsConfigurationManager.class
                      serverConfigurationProvider:FBSDKServerConfigurationManager.class
@@ -594,20 +614,31 @@ static UIApplicationState _applicationState;
                                           logger:FBSDKLogger.class
                                         settings:sharedSettings
                                  paymentObserver:FBSDKPaymentObserver.shared
-                               timeSpentRecorder:FBSDKTimeSpentData.shared
+                        timeSpentRecorderFactory:timeSpentRecordingFactory
                              appEventsStateStore:FBSDKAppEventsStateManager.shared
-             eventDeactivationParameterProcessor:FBSDKEventDeactivationManager.shared
-         restrictiveDataFilterParameterProcessor:FBSDKRestrictiveDataFilterManager.shared
+             eventDeactivationParameterProcessor:eventDeactivationManager
+         restrictiveDataFilterParameterProcessor:restrictiveDataFilterManager
                              atePublisherFactory:atePublisherFactory
+                          appEventsStateProvider:[FBSDKAppEventsStateFactory new]
                                         swizzler:FBSDKSwizzler.class];
   [FBSDKInternalUtility configureWithInfoDictionaryProvider:NSBundle.mainBundle];
-  [FBSDKGraphRequestPiggybackManager configureWithTokenWallet:FBSDKAccessToken.class];
   [FBSDKAppEventsConfigurationManager configureWithStore:store
                                                 settings:sharedSettings
                                      graphRequestFactory:graphRequestProvider
                            graphRequestConnectionFactory:connectionProvider];
+  [FBSDKGraphRequestPiggybackManager configureWithTokenWallet:FBSDKAccessToken.class
+                                                     settings:sharedSettings
+                                          serverConfiguration:[FBSDKServerConfigurationManager class]
+                                              requestProvider:graphRequestProvider];
   [FBSDKButton setApplicationActivationNotifier:self];
+  [FBSDKError configureWithErrorReporter:FBSDKErrorReport.shared];
 #if !TARGET_OS_TV
+  [FBSDKModelManager.shared configureWithFeatureChecker:FBSDKFeatureManager.shared
+                                    graphRequestFactory:graphRequestProvider
+                                            fileManager:NSFileManager.defaultManager
+                                                  store:store
+                                               settings:sharedSettings
+                                          dataExtractor:NSData.class];
   [FBSDKFeatureExtractor configureWithRulesFromKeyProvider:FBSDKModelManager.shared];
   [FBSDKAppLinkUtility configureWithRequestProvider:graphRequestProvider
                              infoDictionaryProvider:NSBundle.mainBundle];

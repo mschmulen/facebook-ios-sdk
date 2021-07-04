@@ -18,15 +18,16 @@
 
 #import <Foundation/Foundation.h>
 
-#import <FBSDKGamingServiceCompletionHandler.h>
+#import "FBSDKGamingServiceCompletionHandler.h"
 
-#import "FBSDKCoreKitInternalImport.h"
+#import "FBSDKGamingServicesCoreKitImport.h"
 
 typedef NS_ENUM(NSUInteger, FBSDKGamingServiceType) {
   FBSDKGamingServiceTypeFriendFinder,
   FBSDKGamingServiceTypeMediaAsset,
   FBSDKGamingServiceTypeCommunity,
-};
+}
+NS_SWIFT_NAME(GamingServiceType);
 
 @interface FBSDKGamingServiceController : NSObject <FBSDKURLOpening>
 

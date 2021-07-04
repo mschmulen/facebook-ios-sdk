@@ -27,11 +27,12 @@
 @protocol FBSDKLogging;
 @protocol FBSDKSettings;
 @protocol FBSDKPaymentObserving;
-@protocol FBSDKTimeSpentRecording;
+@protocol FBSDKTimeSpentRecordingCreating;
 @protocol FBSDKAppEventsStatePersisting;
 @protocol FBSDKAppEventsParameterProcessing;
 @protocol FBSDKAppEventsParameterProcessing;
 @protocol FBSDKAtePublisherCreating;
+@protocol FBSDKAppEventsStateProviding;
 @protocol FBSDKSwizzling;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -48,11 +49,12 @@ NS_SWIFT_NAME(AppEventsConfiguring)
                                    logger:(Class<FBSDKLogging>)logger
                                  settings:(id<FBSDKSettings>)settings
                           paymentObserver:(id<FBSDKPaymentObserving>)paymentObserver
-                        timeSpentRecorder:(id<FBSDKTimeSpentRecording>)timeSpentRecorder
+                 timeSpentRecorderFactory:(id<FBSDKTimeSpentRecordingCreating>)timeSpentRecorderFactory
                       appEventsStateStore:(id<FBSDKAppEventsStatePersisting>)appEventsStateStore
       eventDeactivationParameterProcessor:(id<FBSDKAppEventsParameterProcessing>)eventDeactivationParameterProcessor
   restrictiveDataFilterParameterProcessor:(id<FBSDKAppEventsParameterProcessing>)restrictiveDataFilterParameterProcessor
                       atePublisherFactory:(id<FBSDKAtePublisherCreating>)atePublisherFactory
+                   appEventsStateProvider:(id<FBSDKAppEventsStateProviding>)appEventsStateProvider
                                  swizzler:(Class<FBSDKSwizzling>)swizzler;
 
 @end

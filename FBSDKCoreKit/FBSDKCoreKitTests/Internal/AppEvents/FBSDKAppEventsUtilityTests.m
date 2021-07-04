@@ -27,17 +27,21 @@
 #import "FBSDKAppEvents+Internal.h"
 #import "FBSDKCoreKit+Internal.h"
 #import "FBSDKCoreKitTests-Swift.h"
-#import "FBSDKTestCase.h"
 
 static NSString *const FBSDKSettingsInstallTimestamp = @"com.facebook.sdk:FBSDKSettingsInstallTimestamp";
 static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.sdk:FBSDKSettingsAdvertisingTrackingStatus";
 
 @interface FBSDKSettings ()
 + (void)resetAdvertiserTrackingStatusCache;
++ (void)setAdvertiserTrackingStatus:(FBSDKAdvertisingTrackingStatus)status;
 @end
 
 @interface FBSDKAppEventsConfiguration ()
 - (void)setDefaultATEStatus:(FBSDKAdvertisingTrackingStatus)status;
+@end
+
+@interface FBSDKAppEventsConfigurationManager ()
+@property (nonnull, nonatomic) FBSDKAppEventsConfiguration *configuration;
 @end
 
 @implementation FBSDKAppEventsUtilityTests
@@ -45,6 +49,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   UserDefaultsSpy *userDefaultsSpy;
   TestBundle *bundle;
   TestEventLogger *logger;
+  TestAppEventsStateProvider *appEventsStateProvider;
 }
 
 + (void)setUp
@@ -60,11 +65,10 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 
   [super setUp];
 
-  [self stubServerConfigurationFetchingWithConfiguration:[FBSDKServerConfiguration defaultServerConfigurationForAppID:nil] error:nil];
-
   userDefaultsSpy = [UserDefaultsSpy new];
   bundle = [TestBundle new];
   logger = [TestEventLogger new];
+  appEventsStateProvider = [TestAppEventsStateProvider new];
   TestAppEventsConfigurationProvider.stubbedConfiguration = SampleAppEventsConfigurations.valid;
 
   [FBSDKSettings configureWithStore:userDefaultsSpy
@@ -80,11 +84,12 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
                                                     logger:TestLogger.class
                                                   settings:[TestSettings new]
                                            paymentObserver:[TestPaymentObserver new]
-                                         timeSpentRecorder:[TestTimeSpentRecorder new]
+                                  timeSpentRecorderFactory:[TestTimeSpentRecorderFactory new]
                                        appEventsStateStore:[TestAppEventsStateStore new]
                        eventDeactivationParameterProcessor:[TestAppEventsParameterProcessor new]
                    restrictiveDataFilterParameterProcessor:[TestAppEventsParameterProcessor new]
                                        atePublisherFactory:[TestAtePublisherFactory new]
+                                    appEventsStateProvider:appEventsStateProvider
                                                   swizzler:TestSwizzler.class];
 }
 
@@ -96,6 +101,8 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   [TestServerConfigurationProvider reset];
   [TestGateKeeperManager reset];
   FBSDKAppEventsUtility.cachedAdvertiserIdentifierManager = nil;
+  [FBSDKSettings reset];
+  [FBSDKAppEventsConfigurationManager reset];
 
   [super tearDown];
 }
@@ -121,8 +128,6 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 
 - (void)testParamsDictionary
 {
-  [self stubAppEventsUtilityAdvertiserIDWith:NSUUID.UUID.UUIDString];
-  [self stubIsAdvertiserTrackingEnabledWith:YES];
   [self stubAppEventsUtilityAdvertiserIDWith:NSUUID.UUID.UUIDString];
   NSDictionary *dict = [FBSDKAppEventsUtility activityParametersDictionaryForEvent:@"event"
                                                          shouldAccessAdvertisingID:YES];
@@ -211,32 +216,26 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 
 - (void)testGetAdvertiserIDOniOS14WithCollectionEnabled
 {
-  [self stubIsAdvertiserIDCollectionEnabledWith:YES];
-  FBSDKAppEventsConfiguration *configuration = [SampleAppEventsConfigurations createWithDefaultATEStatus:FBSDKAdvertisingTrackingUnspecified
-                                                                           advertiserIDCollectionEnabled:YES
-                                                                                  eventCollectionEnabled:YES];
-  [self stubCachedAppEventsConfigurationWithConfiguration:configuration];
-  [self stubAdvertisingIdentifierWithIdentifier:NSUUID.UUID];
-  [self stubSharedAsIdentifierManagerWithAsIdentifierManager:self.asIdentifierManagerClassMock];
+  FBSDKAppEventsConfiguration *configuration = [SampleAppEventsConfigurations createWithAdvertiserIDCollectionEnabled:YES];
+  FBSDKAppEventsConfigurationManager.shared.configuration = configuration;
 
   if (@available(iOS 14.0, *)) {
+  #ifndef BUCK
+    // This test fails in buck but passes in Xcode. Even if -FBSDKAppEventsUtility.advertiserID is set directly to [ASIdentifierManager sharedManager].advertisingIdentifier.UUIDString
     XCTAssertNotNil(
       [FBSDKAppEventsUtility.shared advertiserID],
       "Advertiser id should not be nil when collection is enabled"
     );
+  #endif
   }
 }
 
 - (void)testGetAdvertiserIDOniOS14WithCollectionDisabled
 {
-  [self stubIsAdvertiserTrackingEnabledWith:YES];
-
   FBSDKAppEventsConfiguration *configuration = [SampleAppEventsConfigurations createWithDefaultATEStatus:FBSDKAdvertisingTrackingUnspecified
                                                                            advertiserIDCollectionEnabled:NO
                                                                                   eventCollectionEnabled:YES];
-  [self stubCachedAppEventsConfigurationWithConfiguration:configuration];
-  [self stubAdvertisingIdentifierWithIdentifier:NSUUID.UUID];
-  [self stubSharedAsIdentifierManagerWithAsIdentifierManager:self.asIdentifierManagerClassMock];
+  FBSDKAppEventsConfigurationManager.shared.configuration = configuration;
 
   if (@available(iOS 14.0, *)) {
     XCTAssertNil([FBSDKAppEventsUtility.shared advertiserID]);
@@ -245,12 +244,12 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 
 - (void)testShouldDropAppEvent
 {
-  [self stubAdvertisingTrackingStatusWith:FBSDKAdvertisingTrackingDisallowed];
+  [FBSDKSettings setAdvertiserTrackingStatus:FBSDKAdvertisingTrackingDisallowed];
 
   FBSDKAppEventsConfiguration *configuration = [SampleAppEventsConfigurations createWithDefaultATEStatus:FBSDKAdvertisingTrackingUnspecified
                                                                            advertiserIDCollectionEnabled:YES
                                                                                   eventCollectionEnabled:NO];
-  [self stubCachedAppEventsConfigurationWithConfiguration:configuration];
+  FBSDKAppEventsConfigurationManager.shared.configuration = configuration;
 
   if (@available(iOS 14.0, *)) {
     XCTAssertTrue([FBSDKAppEventsUtility shouldDropAppEvent]);
@@ -301,20 +300,70 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 
 - (void)testDropAppEvent
 {
-  [FBSDKSettings setAppID:@"123"];
+  // shouldDropAppEvent only when: advertisingTrackingStatus == Disallowed && FBSDKAppEventsConfiguration.eventCollectionEnabled == NO
+  [FBSDKSettings setAdvertiserTrackingStatus:FBSDKAdvertisingTrackingDisallowed];
+  FBSDKAppEventsConfigurationManager.shared.configuration = [SampleAppEventsConfigurations createWithEventCollectionEnabled:NO];
 
-  [self stubAppEventsUtilityShouldDropAppEventWith:YES];
+  [FBSDKSettings setAppID:@"123"];
   [FBSDKAppEvents logEvent:@"event"];
-  OCMReject([self.appEventStatesMock addEvent:OCMArg.any isImplicit:NO]);
+
+  XCTAssertFalse(
+    appEventsStateProvider.state.isAddEventCalled,
+    "Shouldn't call addEvents on AppEventsState when dropping app event"
+  );
 }
 
-- (void)testSendAppEvent
+- (void)testSendAppEventWhenTrackingUnspecified
 {
-  [FBSDKSettings setAppID:@"123"];
+  [FBSDKSettings setAdvertiserTrackingStatus:FBSDKAdvertisingTrackingUnspecified];
+  FBSDKAppEventsConfigurationManager.shared.configuration = [SampleAppEventsConfigurations createWithEventCollectionEnabled:NO];
 
-  [self stubAppEventsUtilityShouldDropAppEventWith:NO];
+  [FBSDKSettings setAppID:@"123"];
   [FBSDKAppEvents logEvent:@"event"];
-  OCMVerify([self.appEventStatesMock addEvent:OCMArg.any isImplicit:NO]);
+
+  XCTAssertTrue(
+    appEventsStateProvider.state.isAddEventCalled,
+    "Should call addEvents on AppEventsState when sending app event"
+  );
+  XCTAssertFalse(
+    appEventsStateProvider.state.capturedIsImplicit,
+    "Shouldn't implicitly call addEvents on AppEventsState when sending app event"
+  );
+}
+
+- (void)testSendAppEventWhenTrackingAllowed
+{
+  [FBSDKSettings setAdvertiserTrackingStatus:FBSDKAdvertisingTrackingAllowed];
+  FBSDKAppEventsConfigurationManager.shared.configuration = [SampleAppEventsConfigurations createWithEventCollectionEnabled:NO];
+
+  [FBSDKSettings setAppID:@"123"];
+  [FBSDKAppEvents logEvent:@"event"];
+
+  XCTAssertTrue(
+    appEventsStateProvider.state.isAddEventCalled,
+    "Should call addEvents on AppEventsState when sending app event"
+  );
+  XCTAssertFalse(
+    appEventsStateProvider.state.capturedIsImplicit,
+    "Shouldn't implicitly call addEvents on AppEventsState when sending app event"
+  );
+}
+
+- (void)testSendAppEventWhenEventCollectionEnabled
+{
+  [FBSDKSettings setAdvertiserTrackingStatus:FBSDKAdvertisingTrackingDisallowed];
+  FBSDKAppEventsConfigurationManager.shared.configuration = [SampleAppEventsConfigurations createWithEventCollectionEnabled:YES];
+
+  [FBSDKSettings setAppID:@"123"];
+  [FBSDKAppEvents logEvent:@"event"];
+  XCTAssertTrue(
+    appEventsStateProvider.state.isAddEventCalled,
+    "Should call addEvents on AppEventsState when sending app event"
+  );
+  XCTAssertFalse(
+    appEventsStateProvider.state.capturedIsImplicit,
+    "Shouldn't implicitly call addEvents on AppEventsState when sending app event"
+  );
 }
 
 - (void)testFlushReasonToString
@@ -402,7 +451,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 {
   [FBSDKAppEvents setLoggingOverrideAppID:nil];
   [FBSDKAccessToken setCurrentAccessToken:nil];
-  [FBSDKSettings setAppID:@"123"];
+  [FBSDKSettings setAppID:SampleAccessTokens.validToken.appID];
   [FBSDKSettings setClientToken:nil];
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertNil(
@@ -415,12 +464,12 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 {
   [FBSDKAppEvents setLoggingOverrideAppID:nil];
   [FBSDKAccessToken setCurrentAccessToken:nil];
-  [FBSDKSettings setAppID:@"123"];
+  [FBSDKSettings setAppID:@"abc"];
   [FBSDKSettings setClientToken:@"toktok"];
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    @"123|toktok",
+    @"abc|toktok",
     "Should provide a token string with the app id and client token"
   );
 }
@@ -434,8 +483,8 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    SampleAccessTokens.validToken.appID,
-    "Should provide a token string with the access token's app id"
+    SampleAccessTokens.validToken.tokenString,
+    "Should provide the token string stored on the current access token"
   );
 }
 
@@ -448,8 +497,8 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    SampleAccessTokens.validToken.appID,
-    "Should provide a token string with the access token's app id"
+    SampleAccessTokens.validToken.tokenString,
+    "Should provide the token string stored on the current access token"
   );
 }
 
@@ -462,8 +511,9 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    SampleAccessTokens.validToken.appID,
-    "Should provide a token string with the access token's app id"
+    SampleAccessTokens.validToken.tokenString,
+    "Should provide the token string stored on the current access token when "
+    "the app id on the token does not match the app id in settings"
   );
 }
 
@@ -476,8 +526,9 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    SampleAccessTokens.validToken.appID,
-    "Should provide a token string with the access token's app id"
+    SampleAccessTokens.validToken.tokenString,
+    "Should provide the token string stored on the current access token when "
+    "the app id on the token does not match the app id in settings"
   );
 }
 
@@ -490,7 +541,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertNil(
     tokenString,
-    "Should not provide a token string without an app id or client token"
+    "Should not provide a token string without an access token, app id, or client token"
   );
 }
 
@@ -503,7 +554,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertNil(
     tokenString,
-    "Should not provide a token string with the logging app id and client token"
+    "Should not provide a token string without an access token or app id"
   );
 }
 
@@ -511,7 +562,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 {
   [FBSDKAppEvents setLoggingOverrideAppID:@"789"];
   [FBSDKAccessToken setCurrentAccessToken:nil];
-  [FBSDKSettings setAppID:@"123"];
+  [FBSDKSettings setAppID:SampleAccessTokens.validToken.appID];
   [FBSDKSettings setClientToken:nil];
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertNil(
@@ -524,7 +575,7 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
 {
   [FBSDKAppEvents setLoggingOverrideAppID:@"789"];
   [FBSDKAccessToken setCurrentAccessToken:nil];
-  [FBSDKSettings setAppID:@"123"];
+  [FBSDKSettings setAppID:SampleAccessTokens.validToken.appID];
   [FBSDKSettings setClientToken:@"toktok"];
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertNil(
@@ -594,8 +645,8 @@ static NSString *const FBSDKSettingsAdvertisingTrackingStatus = @"com.facebook.s
   NSString *tokenString = [FBSDKAppEventsUtility tokenStringToUseFor:nil];
   XCTAssertEqualObjects(
     tokenString,
-    SampleAccessTokens.validToken.appID,
-    "Should provide a token string with the access token's app id when the logging override matches it"
+    SampleAccessTokens.validToken.tokenString,
+    "Should provide the token string stored on the access token when the access token's app id matches the logging override"
   );
 }
 

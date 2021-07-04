@@ -17,7 +17,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import "FBSDKLoggingBehavior.h"
-#import "FBSDKAppEventsUtility.h"
+#import "FBSDKAdvertisingTrackingStatus.h"
 
 NS_SWIFT_NAME(SettingsProtocol)
 @protocol FBSDKSettings
@@ -38,5 +38,6 @@ NS_SWIFT_NAME(SettingsProtocol)
 @property (nonatomic, readonly, nullable) NSDate* advertiserTrackingEnabledTimestamp;
 @property (nonatomic, readonly) BOOL shouldLimitEventAndDataUsage;
 @property (nonatomic) BOOL shouldUseTokenOptimizations;
+@property (nonatomic, readonly) NSString * _Nonnull graphAPIVersion;
 
 @end

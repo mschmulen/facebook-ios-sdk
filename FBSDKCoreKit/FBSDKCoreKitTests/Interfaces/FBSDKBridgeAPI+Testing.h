@@ -17,10 +17,15 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import <FBSDKCoreKit/FBSDKCoreKit.h>
+#import <SafariServices/SafariServices.h>
 #import "FBSDKBridgeAPI.h"
 #import "FBSDKContainerViewController.h"
 #import "FBSDKOperatingSystemVersionComparing.h"
 #import "NSProcessInfo+Protocols.h"
+
+@protocol FBSDKLogging;
+@protocol FBSDKURLOpener;
+@protocol FBSDKBridgeAPIResponseCreating;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,16 +58,23 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
   FBSDKAuthenticationSessionCanceledBySystem,
 };
 
+@protocol FBSDKDynamicFrameworkResolving;
+
 @interface FBSDKBridgeAPI (Testing)
 
 @property (nonatomic, assign, readonly) id<FBSDKOperatingSystemVersionComparing> processInfo;
+@property (nonatomic, readonly) id<FBSDKURLOpener> urlOpener;
+@property (nonatomic, readonly) id<FBSDKLogging> logger;
+@property (nonatomic, readonly) id<FBSDKBridgeAPIResponseCreating> bridgeAPIResponseFactory;
+@property (nonatomic, readonly) id<FBSDKDynamicFrameworkResolving> frameworkLoader;
+@property (nonatomic, readonly) id<FBSDKAppURLSchemeProviding> appURLSchemeProvider;
 
 - (id<FBSDKAuthenticationSession>)authenticationSession;
 - (FBSDKAuthenticationSession)authenticationSessionState;
 - (FBSDKAuthenticationCompletionHandler)authenticationSessionCompletionHandler;
 - (BOOL)expectingBackground;
 - (id<FBSDKURLOpening>)pendingUrlOpen;
-- (UIViewController *)safariViewController;
+- (SFSafariViewController *)safariViewController;
 - (BOOL)isDismissingSafariViewController;
 - (NSObject<FBSDKBridgeAPIRequestProtocol> *)pendingRequest;
 - (FBSDKBridgeAPIResponseBlock)pendingRequestCompletionBlock;
@@ -87,7 +99,7 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
 - (void)setSafariViewController:(nullable UIViewController *)controller;
 - (void)setIsDismissingSafariViewController:(BOOL)isDismissing;
 - (void)setPendingRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)newValue;
-- (void)setPendingRequestCompletionBlock:(FBSDKBridgeAPIResponseBlock)newValue;
+- (void)setPendingRequestCompletionBlock:(nullable FBSDKBridgeAPIResponseBlock)newValue;
 
 - (BOOL)_handleBridgeAPIResponseURL:(NSURL *)responseURL sourceApplication:(NSString *)sourceApplication;
 - (FBSDKSuccessBlock)_bridgeAPIRequestCompletionBlockWithRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)request
@@ -96,6 +108,8 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
 
 - (void)safariViewControllerDidFinish:(UIViewController *)safariViewController;
 - (void)viewControllerDidDisappear:(FBSDKContainerViewController *)viewController animated:(BOOL)animated;
+- (void)openURLWithAuthenticationSession:(NSURL *)url;
+- (void)setSessionCompletionHandlerFromHandler:(void (^)(BOOL, NSError *))handler;
 
 @end
 
@@ -106,6 +120,11 @@ typedef NS_ENUM(NSUInteger, FBSDKAuthenticationSession) {
                                     sourceApplication:(NSString *)sourceApplication
                                     osVersionComparer:(id<FBSDKOperatingSystemVersionComparing>)comparer
                                                 error:(NSError *__autoreleasing *)errorRef;
+
+- (instancetype)initWithRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)request
+             responseParameters:(NSDictionary *)responseParameters
+                      cancelled:(BOOL)cancelled
+                          error:(nullable NSError *)error;
 
 @end
 

@@ -16,20 +16,21 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import "FBSDKLoginUtilityTests.h"
+#import "FBSDKTimeSpentData.h"
 
-#import <OCMock/OCMock.h>
+NS_ASSUME_NONNULL_BEGIN
 
-@implementation FBSDKLoginUtilityTests
+@interface FBSDKTimeSpentData ()
 
-+ (id)mainBundleMock
-{
-  // swizzle out mainBundle - XCTest returns the XCTest program bundle instead of the target,
-  // and our keychain code is coded against mainBundle.
-  id mockNSBundle = [OCMockObject niceMockForClass:[NSBundle class]];
-  NSBundle *correctMainBundle = [NSBundle bundleForClass:[self class]];
-  [[[[mockNSBundle stub] classMethod] andReturn:correctMainBundle] mainBundle];
-  return mockNSBundle;
-}
+@property (nonatomic, weak) id<FBSDKEventLogging> eventLogger;
+@property (nonnull, nonatomic) Class<FBSDKServerConfigurationProviding> serverConfigurationProvider;
+@property (nonatomic) NSString *sourceApplication;
+@property (nonatomic) BOOL isOpenedFromAppLink;
+
+- (NSString *)getSourceApplication;
+- (void)resetSourceApplication;
+- (NSDictionary<NSString *, id> *)appEventsParametersForDeactivate;
 
 @end
+
+NS_ASSUME_NONNULL_END

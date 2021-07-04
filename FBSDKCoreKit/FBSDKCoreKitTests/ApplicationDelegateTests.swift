@@ -30,6 +30,10 @@ class ApplicationDelegateTests: XCTestCase {
   var store = UserDefaultsSpy()
   let observer = TestApplicationDelegateObserver()
   let settings = TestSettings()
+  let backgroundEventLogger = TestBackgroundEventLogger(
+    infoDictionaryProvider: TestBundle(),
+    eventLogger: TestAppEvents()
+  )
   let bitmaskKey = "com.facebook.sdk.kits.bitmask"
   lazy var profile = Profile(
     userID: name,
@@ -52,7 +56,7 @@ class ApplicationDelegateTests: XCTestCase {
 
     ApplicationDelegate.reset()
     delegate = ApplicationDelegate(
-      notificationObserver: center,
+      notificationCenter: center,
       tokenWallet: TestAccessTokenWallet.self,
       settings: settings,
       featureChecker: featureChecker,
@@ -60,7 +64,8 @@ class ApplicationDelegateTests: XCTestCase {
       serverConfigurationProvider: TestServerConfigurationProvider.self,
       store: store,
       authenticationTokenWallet: TestAuthenticationTokenWallet.self,
-      profileProvider: TestProfileProvider.self
+      profileProvider: TestProfileProvider.self,
+      backgroundEventLogger: backgroundEventLogger
     )
   }
 
@@ -156,6 +161,22 @@ class ApplicationDelegateTests: XCTestCase {
       settings,
       "Should be able to create with custom settings"
     )
+    XCTAssertEqual(
+      delegate.backgroundEventLogger as? TestBackgroundEventLogger,
+      backgroundEventLogger,
+      "Should be able to create with custom background event logger"
+    )
+  }
+
+  func testCreatingSetsExpirer() throws {
+    let delegateCenter = try XCTUnwrap(delegate.notificationObserver as? TestNotificationCenter)
+    let expirerCenter = try XCTUnwrap(delegate.accessTokenExpirer.notificationCenter as? TestNotificationCenter)
+
+    XCTAssertEqual(
+      expirerCenter,
+      delegateCenter,
+      "Should create the token expirer using the delegate's notification center"
+    )
   }
 
   // MARK: - Initializing SDK
@@ -216,6 +237,92 @@ class ApplicationDelegateTests: XCTestCase {
         )
       ),
       "Should start observing application resignation upon initializtion"
+    )
+  }
+
+  func testInitializingSdkSetsSessionInformation() {
+    delegate.initializeSDK(
+      launchOptions: [
+        UIApplication.LaunchOptionsKey.sourceApplication: name,
+        .url: SampleUrls.valid
+      ]
+    )
+
+    XCTAssertEqual(
+      appEvents.capturedSetSourceApplication,
+      name,
+      "Should set the source application based on the launch options"
+    )
+    XCTAssertEqual(
+      appEvents.capturedSetSourceApplicationURL,
+      SampleUrls.valid,
+      "Should set the source application url based on the launch options"
+    )
+  }
+
+  func testInitializingSdkRegistersForSessionUpdates() {
+    delegate.initializeSDK(launchOptions: [:])
+
+    XCTAssertTrue(
+      appEvents.wasRegisterAutoResetSourceApplicationCalled,
+      "Should have the analytics session register to auto reset the source application"
+    )
+  }
+
+  // MARK: - Configuring Dependencies
+
+  func testInitializingConfiguresError() {
+    SDKError.reset()
+    XCTAssertNil(
+      SDKError.errorReporter,
+      "Should not have an error reporter by default"
+    )
+    delegate.initializeSDK(launchOptions: [:])
+
+    XCTAssertEqual(
+      SDKError.errorReporter as? ErrorReport,
+      ErrorReport.shared
+    )
+  }
+
+  func testInitializingConfiguresModelManager() {
+    ModelManager.reset()
+    XCTAssertNil(ModelManager.shared.featureChecker, "Should not have a feature checker by default")
+    XCTAssertNil(ModelManager.shared.graphRequestFactory, "Should not have a request factory by default")
+    XCTAssertNil(ModelManager.shared.fileManager, "Should not have a file manager by default")
+    XCTAssertNil(ModelManager.shared.store, "Should not have a data store by default")
+    XCTAssertNil(ModelManager.shared.settings, "Should not have a settings by default")
+    XCTAssertNil(ModelManager.shared.dataExtractor, "Should not have a data extractor by default")
+
+    delegate.initializeSDK(launchOptions: [:])
+
+    XCTAssertEqual(
+      ModelManager.shared.featureChecker as? FeatureManager,
+      FeatureManager.shared,
+      "Should configure with the expected concrete feature checker"
+    )
+    XCTAssertTrue(
+      ModelManager.shared.graphRequestFactory is GraphRequestFactory,
+      "Should configure with a request factory of the expected type"
+    )
+    XCTAssertEqual(
+      ModelManager.shared.fileManager as? FileManager,
+      FileManager.default,
+      "Should configure with the expected concrete file manager"
+    )
+    XCTAssertEqual(
+      ModelManager.shared.store as? UserDefaults,
+      UserDefaults.standard,
+      "Should configure with the expected concrete data store"
+    )
+    XCTAssertEqual(
+      ModelManager.shared.settings as? Settings,
+      Settings.shared,
+      "Should configure with the expected concrete settings"
+    )
+    XCTAssertTrue(
+      ModelManager.shared.dataExtractor is NSData.Type,
+      "Should configure with the expected concrete data extractor"
     )
   }
 
@@ -337,4 +444,4 @@ class ApplicationDelegateTests: XCTestCase {
       "Should inform observers when the application will resign active status"
     )
   }
-}
+} // swiftlint:disable:this file_length

@@ -20,10 +20,11 @@ import FBSDKCoreKit
 import Foundation
 
 @objcMembers
-class TestAppEventsParameterProcessor: NSObject, AppEventsParameterProcessing {
+class TestAppEventsParameterProcessor: NSObject, AppEventsParameterProcessing, EventsProcessing {
   var enableWasCalled = false
   var capturedParameters: [String: Any]?
   var capturedEventName: String?
+  var capturedEvents: [[String: Any]]?
 
   func enable() {
     enableWasCalled = true
@@ -33,5 +34,9 @@ class TestAppEventsParameterProcessor: NSObject, AppEventsParameterProcessing {
     capturedParameters = parameters
     capturedEventName = eventName
     return parameters
+  }
+
+  func processEvents(_ events: NSMutableArray?) {
+    self.capturedEvents = events?.copy() as? [[String: Any]]
   }
 }

@@ -17,7 +17,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import <Foundation/Foundation.h>
-#import <OCMock/OCMock.h>
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
@@ -25,27 +24,18 @@
 
 #import "FBSDKBridgeAPI+Testing.h"
 #import "FBSDKCoreKitTests-Swift.h"
-#import "FBSDKTestCase.h"
 #import "FakeLoginManager.h"
 
-@interface FBSDKBridgeAPI (Testing)
-- (void)_openURLWithSafariViewController:(NSURL *)url
-                                  sender:(id<FBSDKURLOpening>)sender
-                      fromViewController:(UIViewController *)fromViewController
-                                 handler:(FBSDKSuccessBlock)handler
-                           dylibResolver:(id<FBSDKDynamicFrameworkResolving>)dylibResolver;
-- (void)openURLWithAuthenticationSession:(NSURL *)url;
-- (void)setSessionCompletionHandlerFromHandler:(void (^)(BOOL, NSError *))handler;
-
-@end
-
-@interface FBSDKBridgeAPITests : FBSDKTestCase
+@interface FBSDKBridgeAPITests : XCTestCase
 
 @property FBSDKBridgeAPI *api;
 @property (nonatomic) TestLogger *logger;
-@property id partialMock;
 @property (readonly) NSURL *sampleUrl;
 @property (readonly) NSError *sampleError;
+@property (nonatomic) TestURLOpener *urlOpener;
+@property (nonatomic) TestBridgeApiResponseFactory *bridgeAPIResponseFactory;
+@property (nonatomic) TestDylibResolver *frameworkLoader;
+@property (nonatomic) TestAppURLSchemeProvider *appURLSchemeProvider;
 
 extern NSString *const sampleSource;
 extern NSString *const sampleAnnotation;

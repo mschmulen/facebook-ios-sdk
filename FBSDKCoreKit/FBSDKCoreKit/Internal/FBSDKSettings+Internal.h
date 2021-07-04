@@ -17,12 +17,12 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #if SWIFT_PACKAGE
+#import "FBSDKAdvertisingTrackingStatus.h"
  #import "FBSDKSettings.h"
 #else
+#import <FBSDKCoreKit/FBSDKAdvertisingTrackingStatus.h>
  #import <FBSDKCoreKit/FBSDKSettings.h>
 #endif
-
-#import "FBSDKAppEventsUtility.h"
 
 #define DATA_PROCESSING_OPTIONS         @"data_processing_options"
 #define DATA_PROCESSING_OPTIONS_COUNTRY @"data_processing_options_country"
@@ -37,6 +37,8 @@
 @interface FBSDKSettings (Internal)
 
 @property (class, nullable, nonatomic, readonly, copy) NSString *graphAPIDebugParamValue;
+
+@property (nonatomic, copy, null_resettable) NSString *graphAPIVersion;
 
 // used by Unity.
 @property (class, nullable, nonatomic, copy) NSString *userAgentSuffix;

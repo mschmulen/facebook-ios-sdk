@@ -16,22 +16,30 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <Foundation/Foundation.h>
+#import "TargetConditionals.h"
 
-@class FBSDKAccessToken;
-@protocol FBSDKTokenCaching;
+#if !TARGET_OS_TV
 
-NS_SWIFT_NAME(AccessTokenProviding)
-@protocol FBSDKAccessTokenProviding
+@protocol FBSDKBridgeAPIRequestProtocol;
+@class FBSDKBridgeAPIResponse;
 
-@property (class, nonatomic, copy, nullable, readonly) FBSDKAccessToken *currentAccessToken;
-@property (class, nonatomic, copy, nullable) id<FBSDKTokenCaching> tokenCache;
+NS_ASSUME_NONNULL_BEGIN
+
+NS_SWIFT_NAME(BridgeAPIResponseCreating)
+@protocol FBSDKBridgeAPIResponseCreating
+
+- (FBSDKBridgeAPIResponse *)createResponseWithRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)request
+                                                error:(NSError *)error;
+
+- (nullable FBSDKBridgeAPIResponse *)createResponseWithRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)request
+                                                   responseURL:(NSURL *)responseURL
+                                             sourceApplication:(nullable NSString *)sourceApplication
+                                                         error:(NSError *__autoreleasing *)errorRef;
+
+- (FBSDKBridgeAPIResponse *)createResponseCancelledWithRequest:(NSObject<FBSDKBridgeAPIRequestProtocol> *)request;
 
 @end
 
-NS_SWIFT_NAME(AccessTokenSetting)
-@protocol FBSDKAccessTokenSetting
+NS_ASSUME_NONNULL_END
 
-@property (class, nonatomic, copy, nullable) FBSDKAccessToken *currentAccessToken;
-
-@end
+#endif

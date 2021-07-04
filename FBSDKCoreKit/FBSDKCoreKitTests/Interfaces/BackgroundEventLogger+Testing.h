@@ -16,12 +16,18 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import "FBSDKAppEventsParameterProcessing.h"
-#import "FBSDKRestrictiveDataFilterManager.h"
+#import "FBSDKBackgroundEventLogger.h"
+#import "FBSDKBackgroundEventLogging.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface FBSDKRestrictiveDataFilterManager (AppEventsParameterProcessing) <FBSDKAppEventsParameterProcessing>
+@interface FBSDKBackgroundEventLogger (Testing)
+
+@property (nonnull, nonatomic, readonly) id<FBSDKInfoDictionaryProviding> infoDictionaryProvider;
+@property (nonnull, nonatomic, readonly) id<FBSDKEventLogging> eventLogger;
+
+- (BOOL)_isNewBackgroundRefresh;
+
 @end
 
 NS_ASSUME_NONNULL_END

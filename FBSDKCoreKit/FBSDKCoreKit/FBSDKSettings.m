@@ -22,7 +22,6 @@
 #import <AdSupport/AdSupport.h>
 #endif
 
-#import "FBSDKAccessTokenExpirer.h"
 #import "FBSDKAppEventsConfigurationProtocol.h"
 #import "FBSDKAppEventsConfigurationProviding.h"
 #import "FBSDKCoreKitBasicsImport.h"
@@ -91,8 +90,6 @@ static NSString *const FBSDKSettingsUseCachedValuesForExpensiveMetadata = @"com.
 static NSString *const FBSDKSettingsUseTokenOptimizations = @"com.facebook.sdk.FBSDKSettingsUseTokenOptimizations";
 static BOOL g_disableErrorRecovery;
 static NSString *g_userAgentSuffix;
-static NSString *g_defaultGraphAPIVersion;
-static FBSDKAccessTokenExpirer *g_accessTokenExpirer;
 static NSDictionary<NSString *, id> *g_dataProcessingOptions = nil;
 
 //
@@ -119,6 +116,7 @@ static NSString *const advertiserIDCollectionEnabledFalseWarning =
 @property (nullable, nonatomic) id<FBSDKEventLogging> eventLogger;
 @property (nullable, nonatomic) NSNumber *advertiserTrackingStatusBacking;
 @property (nonatomic) BOOL isConfigured;
+@property (nonatomic) NSString *graphAPIVersion;
 
 FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, appID, setAppID);
 FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, appURLSchemeSuffix, setAppURLSchemeSuffix);
@@ -150,15 +148,6 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _codelessDebugLogEnable
 }
 
 static dispatch_once_t sharedSettingsNonce;
-
-+ (void)initialize
-{
-  if (self == [FBSDKSettings class]) {
-    // This should be moved to ApplicationDelegate and its initialization
-    // should be separated from its storage and notification observing
-    g_accessTokenExpirer = [FBSDKAccessTokenExpirer new];
-  }
-}
 
 // Transitional singleton introduced as a way to change the usage semantics
 // from a type-based interface to an instance-based interface.
@@ -546,8 +535,8 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
 
 + (void)setGraphAPIVersion:(NSString *)version
 {
-  if (![g_defaultGraphAPIVersion isEqualToString:version]) {
-    g_defaultGraphAPIVersion = version;
+  if (![self.sharedSettings.graphAPIVersion isEqualToString:version]) {
+    self.sharedSettings.graphAPIVersion = version;
   }
 }
 
@@ -558,7 +547,12 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
 
 + (NSString *)graphAPIVersion
 {
-  return g_defaultGraphAPIVersion ?: self.defaultGraphAPIVersion;
+  return [self.sharedSettings graphAPIVersion];
+}
+
+- (NSString *)graphAPIVersion
+{
+  return _graphAPIVersion ?: FBSDKSettings.defaultGraphAPIVersion;
 }
 
 + (NSNumber *)appEventSettingsForPlistKey:(NSString *)plistKey
@@ -758,7 +752,6 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
   g_loggingBehaviors = nil;
   g_userAgentSuffix = nil;
   g_dataProcessingOptions = nil;
-  g_defaultGraphAPIVersion = nil;
 }
 
 - (void)reset

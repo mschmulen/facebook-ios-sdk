@@ -16,7 +16,6 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import <OCMock/OCMock.h>
 #import <XCTest/XCTest.h>
 
 @import TestTools;
@@ -77,7 +76,6 @@
   FBSDKAppEvents *appEvents = [[FBSDKAppEvents alloc]
                                initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
                                flushPeriodInSeconds:0];
-
   [appEvents publishATE];
   XCTAssertFalse(
     publisher.publishAteWasCalled,
@@ -94,11 +92,12 @@
                                      logger:TestLogger.class
                                    settings:_settings
                             paymentObserver:[TestPaymentObserver new]
-                          timeSpentRecorder:[TestTimeSpentRecorder new]
+                   timeSpentRecorderFactory:[TestTimeSpentRecorderFactory new]
                         appEventsStateStore:[TestAppEventsStateStore new]
         eventDeactivationParameterProcessor:[TestAppEventsParameterProcessor new]
     restrictiveDataFilterParameterProcessor:[TestAppEventsParameterProcessor new]
                         atePublisherFactory:factory
+                     appEventsStateProvider:[TestAppEventsStateProvider new]
                                    swizzler:TestSwizzler.class];
 
   [appEvents publishATE];

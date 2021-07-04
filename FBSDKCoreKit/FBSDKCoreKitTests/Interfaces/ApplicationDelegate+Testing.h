@@ -24,6 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol FBSDKAccessTokenProviding;
 @protocol FBSDKAuthenticationTokenProviding;
 @protocol FBSDKAuthenticationTokenSetting;
+@protocol FBSDKBackgroundEventLogging;
 @protocol FBSDKEventLogging;
 @protocol FBSDKFeatureChecking;
 @protocol FBSDKNotificationObserving;
@@ -32,33 +33,39 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol FBSDKApplicationStateSetting;
 @protocol FBSDKAppEventsConfiguring;
 @protocol FBSDKServerConfigurationProviding;
+@protocol FBSDKSourceApplicationTracking;
 @protocol FBSDKProfileProviding;
+@protocol FBSDKTimeSpentRecording;
+@class FBSDKAccessTokenExpirer;
 
 @interface FBSDKApplicationDelegate (Testing)
 
 @property (nonatomic, assign) id<FBSDKNotificationObserving> notificationObserver;
 @property (nonatomic, nullable) Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting> tokenWallet;
 @property (nonatomic, readonly, nonnull) id<FBSDKFeatureChecking> featureChecker;
-@property (nonnull, nonatomic, readonly) id<FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging> appEvents;
+@property (nonnull, nonatomic, readonly) id<FBSDKSourceApplicationTracking, FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging> appEvents;
 @property (nonnull, nonatomic, readonly) Class<FBSDKServerConfigurationProviding> serverConfigurationProvider;
 @property (nonnull, nonatomic, readonly) id<FBSDKDataPersisting> store;
 @property (nonnull, nonatomic, readonly) Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting> authenticationTokenWallet;
 @property (nonnull, nonatomic, readonly) Class<FBSDKProfileProviding> profileProvider;
+@property (nonnull, nonatomic, readonly) id<FBSDKBackgroundEventLogging> backgroundEventLogger;
 @property (nonnull, nonatomic, readonly) id<FBSDKSettingsLogging> settings;
 @property (nonnull, nonatomic) NSHashTable<id<FBSDKApplicationObserving>> *applicationObservers;
+@property (nonnull, nonatomic, readonly) FBSDKAccessTokenExpirer *accessTokenExpirer;
 
 + (void)resetHasInitializeBeenCalled
 NS_SWIFT_NAME(reset());
 
-- (instancetype)initWithNotificationObserver:(id<FBSDKNotificationObserving>)observer
-                                 tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
-                                    settings:(id<FBSDKSettingsLogging>)settings
-                              featureChecker:(id<FBSDKFeatureChecking>)featureChecker
-                                   appEvents:(id<FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
-                 serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
-                                       store:(id<FBSDKDataPersisting>)store
-                   authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
-                             profileProvider:(Class<FBSDKProfileProviding>)profileProvider;
+- (instancetype)initWithNotificationCenter:(id<FBSDKNotificationObserving>)observer
+                               tokenWallet:(Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting>)tokenWallet
+                                  settings:(id<FBSDKSettingsLogging>)settings
+                            featureChecker:(id<FBSDKFeatureChecking>)featureChecker
+                                 appEvents:(id<FBSDKSourceApplicationTracking, FBSDKAppEventsConfiguring, FBSDKApplicationLifecycleObserving, FBSDKApplicationActivating, FBSDKApplicationStateSetting, FBSDKEventLogging>)appEvents
+               serverConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
+                                     store:(id<FBSDKDataPersisting>)store
+                 authenticationTokenWallet:(Class<FBSDKAuthenticationTokenProviding, FBSDKAuthenticationTokenSetting>)authenticationTokenWallet
+                           profileProvider:(Class<FBSDKProfileProviding>)profileProvider
+                     backgroundEventLogger:(id<FBSDKBackgroundEventLogging>)backgroundEventLogger;
 - (void)initializeSDKWithLaunchOptions:(NSDictionary<UIApplicationLaunchOptionsKey, id> *)launchOptions;
 - (void)applicationDidEnterBackground:(NSNotification *)notification;
 - (void)applicationDidBecomeActive:(NSNotification *)notification;

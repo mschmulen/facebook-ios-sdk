@@ -110,16 +110,24 @@ class FBSDKAppLinkUtilityTests: XCTestCase {
       logger: TestLogger.self,
       settings: TestSettings(),
       paymentObserver: TestPaymentObserver(),
-      timeSpentRecorder: TestTimeSpentRecorder(),
+      timeSpentRecorderFactory: TestTimeSpentRecorderFactory(),
       appEventsStateStore: TestAppEventsStateStore(),
       eventDeactivationParameterProcessor: TestAppEventsParameterProcessor(),
       restrictiveDataFilterParameterProcessor: TestAppEventsParameterProcessor(),
       atePublisherFactory: TestAtePublisherFactory(),
+      appEventsStateProvider: TestAppEventsStateProvider(),
       swizzler: TestSwizzler.self
     )
 
     AppLinkUtility.fetchDeferredAppLink()
     XCTAssertEqual(requestFactory.capturedGraphPath, "(null)/activities")
     XCTAssertEqual(requestFactory.capturedHttpMethod, HTTPMethod(rawValue: "POST"))
+  }
+
+  func testValidatingConfiguration() {
+    AppLinkUtility.reset()
+    assertRaisesException(message: "Should throw an exception if the utility has not been configured") {
+      AppLinkUtility.validateConfiguration()
+    }
   }
 }

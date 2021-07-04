@@ -21,6 +21,8 @@
 #ifdef BUCK
 
  #import <FBSDKCoreKit/FBSDKAccessToken.h>
+ #import <FBSDKCoreKit/FBSDKAccessTokenProtocols.h>
+ #import <FBSDKCoreKit/FBSDKAdvertisingTrackingStatus.h>
  #import <FBSDKCoreKit/FBSDKAppEventName.h>
  #import <FBSDKCoreKit/FBSDKAppEventParameterName.h>
  #import <FBSDKCoreKit/FBSDKAppEvents.h>
@@ -36,6 +38,7 @@
  #import <FBSDKCoreKit/FBSDKCoreKitVersions.h>
  #import <FBSDKCoreKit/FBSDKDeviceButton.h>
  #import <FBSDKCoreKit/FBSDKDeviceViewControllerBase.h>
+ #import <FBSDKCoreKit/FBSDKFeatureChecking.h>
  #import <FBSDKCoreKit/FBSDKGraphRequest.h>
  #import <FBSDKCoreKit/FBSDKGraphRequestConnecting.h>
  #import <FBSDKCoreKit/FBSDKGraphRequestConnection.h>
@@ -46,6 +49,8 @@
  #import <FBSDKCoreKit/FBSDKLocation.h>
  #import <FBSDKCoreKit/FBSDKLoggingBehavior.h>
  #import <FBSDKCoreKit/FBSDKSettings.h>
+ #import <FBSDKCoreKit/FBSDKSettingsLogging.h>
+ #import <FBSDKCoreKit/FBSDKSettingsProtocol.h>
  #import <FBSDKCoreKit/FBSDKUserAgeRange.h>
  #import <FBSDKCoreKit/FBSDKUtility.h>
 
@@ -77,6 +82,8 @@
 #else
 
  #import "FBSDKAccessToken.h"
+ #import "FBSDKAccessTokenProtocols.h"
+ #import "FBSDKAdvertisingTrackingStatus.h"
  #import "FBSDKAppEventName.h"
  #import "FBSDKAppEventParameterName.h"
  #import "FBSDKAppEvents.h"
@@ -92,6 +99,7 @@
  #import "FBSDKCoreKitVersions.h"
  #import "FBSDKDeviceButton.h"
  #import "FBSDKDeviceViewControllerBase.h"
+ #import "FBSDKFeatureChecking.h"
  #import "FBSDKGraphRequest.h"
  #import "FBSDKGraphRequestConnecting.h"
  #import "FBSDKGraphRequestConnection.h"
@@ -104,6 +112,8 @@
  #import "FBSDKLoggingBehavior.h"
  #import "FBSDKRandom.h"
  #import "FBSDKSettings.h"
+ #import "FBSDKSettingsLogging.h"
+ #import "FBSDKSettingsProtocol.h"
  #import "FBSDKUserAgeRange.h"
  #import "FBSDKUtility.h"
 

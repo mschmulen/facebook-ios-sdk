@@ -20,9 +20,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+NS_SWIFT_NAME(EventDeactivationManager)
 @interface FBSDKEventDeactivationManager : NSObject
-
-@property (class, nonnull, nonatomic, readonly) FBSDKEventDeactivationManager *shared;
 
 - (void)enable;
 - (void)processEvents:(NSMutableArray<NSDictionary<NSString *, id> *> *)events;

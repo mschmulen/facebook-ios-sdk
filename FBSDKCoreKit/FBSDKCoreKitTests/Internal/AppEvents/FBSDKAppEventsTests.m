@@ -24,6 +24,7 @@
 #import "FBSDKAccessToken.h"
 #import "FBSDKAppEvents.h"
 #import "FBSDKAppEvents+Internal.h"
+#import "FBSDKAppEvents+SourceApplicationTracking.h"
 #import "FBSDKAppEventsConfigurationProviding.h"
 #import "FBSDKAppEventsState.h"
 #import "FBSDKAppEventsUtility.h"
@@ -115,15 +116,17 @@ static NSString *const _mockUserID = @"mockUserID";
   TestSettings *_settings;
   TestOnDeviceMLModelManager *_onDeviceMLModelManager;
   TestPaymentObserver *_paymentObserver;
-  TestTimeSpentRecorder *_timeSpentRecorder;
   TestAppEventsStateStore *_appEventsStateStore;
   TestMetadataIndexer *_metadataIndexer;
   TestAppEventsParameterProcessor *_eventDeactivationParameterProcessor;
   TestAppEventsParameterProcessor *_restrictiveDataFilterParameterProcessor;
+  TestAppEventsStateProvider *_appEventsStateProvider;
 }
 
 @property (nonnull, nonatomic) TestAtePublisherFactory *atePublisherfactory;
 @property (nonnull, nonatomic) TestAtePublisher *atePublisher;
+@property (nonnull, nonatomic) TestTimeSpentRecorderFactory *timeSpentRecorderFactory;
+@property (nonnull, nonatomic) TestTimeSpentRecorder *timeSpentRecorder;
 @property (nonnull, nonatomic) TestAppEventsParameterProcessor *integrityParametersProcessor;
 
 @end
@@ -150,11 +153,7 @@ static NSString *const _mockUserID = @"mockUserID";
   _onDeviceMLModelManager = [TestOnDeviceMLModelManager new];
   _onDeviceMLModelManager.integrityParametersProcessor = self.integrityParametersProcessor;
   _paymentObserver = [TestPaymentObserver new];
-  _timeSpentRecorder = [TestTimeSpentRecorder new];
   _metadataIndexer = [TestMetadataIndexer new];
-
-  [self stubLoadingAdNetworkReporterConfiguration];
-  [self stubServerConfigurationFetchingWithConfiguration:FBSDKServerConfigurationFixtures.defaultConfig error:nil];
 
   _mockEventName = @"fb_mock_event";
   _mockPayload = @{@"fb_push_payload" : @{@"campaign" : @"testCampaign"}};
@@ -167,10 +166,10 @@ static NSString *const _mockUserID = @"mockUserID";
   _appEventsStateStore = [TestAppEventsStateStore new];
   _eventDeactivationParameterProcessor = [TestAppEventsParameterProcessor new];
   _restrictiveDataFilterParameterProcessor = [TestAppEventsParameterProcessor new];
+  _appEventsStateProvider = [TestAppEventsStateProvider new];
   self.atePublisherfactory = [TestAtePublisherFactory new];
-
-  // Mock FBSDKAppEventsUtility methods
-  [self stubAppEventsUtilityShouldDropAppEventWith:NO];
+  self.timeSpentRecorderFactory = [TestTimeSpentRecorderFactory new];
+  self.timeSpentRecorder = self.timeSpentRecorderFactory.recorder;
 
   // Must be stubbed before the configure method is called
   self.atePublisher = [TestAtePublisher new];
@@ -187,11 +186,12 @@ static NSString *const _mockUserID = @"mockUserID";
                                                     logger:TestLogger.class
                                                   settings:_settings
                                            paymentObserver:_paymentObserver
-                                         timeSpentRecorder:_timeSpentRecorder
+                                  timeSpentRecorderFactory:self.timeSpentRecorderFactory
                                        appEventsStateStore:_appEventsStateStore
                        eventDeactivationParameterProcessor:_eventDeactivationParameterProcessor
                    restrictiveDataFilterParameterProcessor:_restrictiveDataFilterParameterProcessor
                                        atePublisherFactory:self.atePublisherfactory
+                                    appEventsStateProvider:_appEventsStateProvider
                                                   swizzler:TestSwizzler.class];
 
   [FBSDKAppEvents configureNonTVComponentsWithOnDeviceMLModelManager:_onDeviceMLModelManager
@@ -261,12 +261,18 @@ static NSString *const _mockUserID = @"mockUserID";
   OCMExpect([self.appEventsMock logPurchase:_mockPurchaseAmount currency:_mockCurrency parameters:[OCMArg any]]).andForwardToRealObject();
   OCMExpect([self.appEventsMock logPurchase:_mockPurchaseAmount currency:_mockCurrency parameters:[OCMArg any] accessToken:[OCMArg any]]).andForwardToRealObject();
   OCMExpect([self.appEventsMock logEvent:FBSDKAppEventNamePurchased valueToSum:@(_mockPurchaseAmount) parameters:[OCMArg any] accessToken:[OCMArg any]]).andForwardToRealObject();
-  OCMExpect([self.appEventStatesMock addEvent:[OCMArg any] isImplicit:NO]);
 
   [FBSDKAppEvents logPurchase:_mockPurchaseAmount currency:_mockCurrency];
 
   OCMVerifyAll(self.appEventsMock);
-  [self.appEventStatesMock verify];
+  XCTAssertTrue(
+    _appEventsStateProvider.state.isAddEventCalled,
+    "Should add events to AppEventsState when logging purshase"
+  );
+  XCTAssertFalse(
+    _appEventsStateProvider.state.capturedIsImplicit,
+    "Shouldn't implicitly add events to AppEventsState when logging purshase"
+  );
 }
 
 - (void)testFlush
@@ -455,37 +461,33 @@ static NSString *const _mockUserID = @"mockUserID";
 
   OCMVerifyAll(self.appEventsMock);
   XCTAssertTrue(
-    _timeSpentRecorder.restoreWasCalled,
+    self.timeSpentRecorder.restoreWasCalled,
     "Activating App with initialized SDK should restore recording time spent data."
   );
   XCTAssertTrue(
-    _timeSpentRecorder.capturedCalledFromActivateApp,
+    self.timeSpentRecorder.capturedCalledFromActivateApp,
     "Activating App with initialized SDK should indicate its calling from activateApp when restoring recording time spent data."
   );
 }
 
 - (void)testApplicationBecomingActiveRestoresTimeSpentRecording
 {
-  FBSDKAppEvents *events = [[FBSDKAppEvents alloc] initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
-                                                    flushPeriodInSeconds:0];
-  [events applicationDidBecomeActive];
+  [FBSDKAppEvents.singleton applicationDidBecomeActive];
   XCTAssertTrue(
-    _timeSpentRecorder.restoreWasCalled,
+    self.timeSpentRecorder.restoreWasCalled,
     "When application did become active, the time spent recording should be restored."
   );
   XCTAssertFalse(
-    _timeSpentRecorder.capturedCalledFromActivateApp,
+    self.timeSpentRecorder.capturedCalledFromActivateApp,
     "When application did become active, the time spent recording restoration should be indicated that it's not activating."
   );
 }
 
 - (void)testApplicationTerminatingSuspendsTimeSpentRecording
 {
-  FBSDKAppEvents *events = [[FBSDKAppEvents alloc] initWithFlushBehavior:FBSDKAppEventsFlushBehaviorExplicitOnly
-                                                    flushPeriodInSeconds:0];
-  [events applicationMovingFromActiveStateOrTerminating];
+  [FBSDKAppEvents.singleton applicationMovingFromActiveStateOrTerminating];
   XCTAssertTrue(
-    _timeSpentRecorder.suspendWasCalled,
+    self.timeSpentRecorder.suspendWasCalled,
     "When application terminates or moves from active state, the time spent recording should be suspended."
   );
 }
@@ -592,7 +594,7 @@ static NSString *const _mockUserID = @"mockUserID";
   XCTAssertNoThrow([FBSDKAppEvents clearUserDataForType:foo]);
 
   XCTAssertFalse(
-    _timeSpentRecorder.restoreWasCalled,
+    self.timeSpentRecorder.restoreWasCalled,
     "Activating App without initialized SDK cannot restore recording time spent data."
   );
 }
@@ -759,7 +761,7 @@ static NSString *const _mockUserID = @"mockUserID";
   _settings.stubbedLimitEventAndDataUsage = NO;
   _settings.advertisingTrackingStatus = FBSDKAdvertisingTrackingAllowed;
   [self stubAppEventsUtilityAdvertiserIDWith:nil];
-  [self stubAppEventsUtilityTokenStringToUseForTokenWith:token.tokenString];
+  [FBSDKAppEvents setLoggingOverrideAppID:token.appID];
 
   [FBSDKAppEvents requestForCustomAudienceThirdPartyIDWithAccessToken:token];
   XCTAssertEqualObjects(
@@ -775,13 +777,12 @@ static NSString *const _mockUserID = @"mockUserID";
 
 - (void)testRequestForCustomAudienceThirdPartyIDWithAccessTokenWithAdvertiserID
 {
-  NSString *expectedGraphPath = [NSString stringWithFormat:@"%@/custom_audience_third_party_id", _mockAppID];
-
   FBSDKAccessToken *token = SampleAccessTokens.validToken;
+  [FBSDKAppEvents setLoggingOverrideAppID:token.appID];
+  NSString *expectedGraphPath = [NSString stringWithFormat:@"%@/custom_audience_third_party_id", token.appID];
   NSString *advertiserID = @"abc123";
   _settings.stubbedLimitEventAndDataUsage = NO;
   _settings.advertisingTrackingStatus = FBSDKAdvertisingTrackingAllowed;
-  [self stubAppEventsUtilityTokenStringToUseForTokenWith:token.tokenString];
   [self stubAppEventsUtilityAdvertiserIDWith:advertiserID];
 
   [FBSDKAppEvents requestForCustomAudienceThirdPartyIDWithAccessToken:token];
@@ -828,22 +829,25 @@ static NSString *const _mockUserID = @"mockUserID";
 {
   [TestGateKeeperManager setGateKeeperValueWithKey:@"app_events_killswitch" value:NO];
 
-  OCMExpect([self.appEventStatesMock addEvent:[OCMArg any] isImplicit:NO]);
-
   [self.appEventsMock instanceLogEvent:_mockEventName
                             valueToSum:@(_mockPurchaseAmount)
                             parameters:nil
                     isImplicitlyLogged:NO
                            accessToken:nil];
 
-  [self.appEventStatesMock verify];
+  XCTAssertTrue(
+    _appEventsStateProvider.state.isAddEventCalled,
+    "Should add events to AppEventsState when killswitch is disabled"
+  );
+  XCTAssertFalse(
+    _appEventsStateProvider.state.capturedIsImplicit,
+    "Shouldn't implicitly add events to AppEventsState when killswitch is disabled"
+  );
 }
 
 - (void)testAppEventsKillSwitchEnabled
 {
   [TestGateKeeperManager setGateKeeperValueWithKey:@"app_events_killswitch" value:YES];
-
-  OCMReject([self.appEventStatesMock addEvent:[OCMArg any] isImplicit:NO]);
 
   [self.appEventsMock instanceLogEvent:_mockEventName
                             valueToSum:@(_mockPurchaseAmount)
@@ -852,6 +856,10 @@ static NSString *const _mockUserID = @"mockUserID";
                            accessToken:nil];
 
   [TestGateKeeperManager setGateKeeperValueWithKey:@"app_events_killswitch" value:NO];
+  XCTAssertFalse(
+    _appEventsStateProvider.state.isAddEventCalled,
+    "Shouldn't add events to AppEventsState when killswitch is enabled"
+  );
 }
 
 #pragma mark  Tests for log event
@@ -1228,6 +1236,55 @@ static NSString *const _mockUserID = @"mockUserID";
   XCTAssertEqual([FBSDKAppEvents.singleton applicationState], UIApplicationStateInactive, "The default value of applicationState should be UIApplicationStateInactive");
   [FBSDKAppEvents.singleton setApplicationState:UIApplicationStateBackground];
   XCTAssertEqual([FBSDKAppEvents.singleton applicationState], UIApplicationStateBackground, "The value of applicationState after calling setApplicationState should be UIApplicationStateBackground");
+}
+
+#pragma mark Source Application Tracking
+
+- (void)testSetSourceApplicationOpenURL
+{
+  NSURL *url = [NSURL URLWithString:@"www.example.com"];
+  [FBSDKAppEvents.singleton setSourceApplication:self.name openURL:url];
+
+  XCTAssertEqualObjects(
+    self.timeSpentRecorder.capturedSetSourceApplication,
+    self.name,
+    "Should behave as a proxy for tracking the source application"
+  );
+  XCTAssertEqualObjects(
+    self.timeSpentRecorder.capturedSetSourceApplicationURL,
+    url,
+    "Should behave as a proxy for tracking the opened URL"
+  );
+}
+
+- (void)testSetSourceApplicationFromAppLink
+{
+  [FBSDKAppEvents.singleton setSourceApplication:self.name isFromAppLink:YES];
+
+  XCTAssertEqualObjects(
+    self.timeSpentRecorder.capturedSetSourceApplicationFromAppLink,
+    self.name,
+    "Should behave as a proxy for tracking the source application"
+  );
+  XCTAssertTrue(
+    self.timeSpentRecorder.capturedIsFromAppLink,
+    "Should behave as a proxy for tracking whether the source application came from an app link"
+  );
+}
+
+- (void)testRegisterAutoResetSourceApplication
+{
+  [FBSDKAppEvents.singleton registerAutoResetSourceApplication];
+
+  XCTAssertTrue(
+    self.timeSpentRecorder.wasRegisterAutoResetSourceApplicationCalled,
+    "Should have the source application tracker register for auto resetting"
+  );
+}
+
+- (void)registerAutoResetSourceApplication
+{
+  [self.timeSpentRecorder registerAutoResetSourceApplication];
 }
 
 @end

@@ -16,12 +16,15 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import "FBSDKFeatureManager.h"
+#import <Foundation/Foundation.h>
 
-NS_SWIFT_NAME(FeatureChecking)
-@protocol FBSDKFeatureChecking
+NS_ASSUME_NONNULL_BEGIN
 
-- (void)checkFeature:(FBSDKFeature)feature
-     completionBlock:(FBSDKFeatureManagerBlock)completionBlock;
+NS_SWIFT_NAME(AppURLSchemeProviding)
+@protocol FBSDKAppURLSchemeProviding
+
+- (NSString *)appURLScheme;
 
 @end
+
+NS_ASSUME_NONNULL_END

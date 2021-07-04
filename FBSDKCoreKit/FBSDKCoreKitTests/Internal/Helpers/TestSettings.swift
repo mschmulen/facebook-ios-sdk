@@ -29,7 +29,8 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
 
   var appID: String?
 
-  var advertisingTrackingStatus: AppEventsUtility.AdvertisingTrackingStatus = .unspecified
+  var stubbedGraphAPIVersion = FBSDK_TARGET_PLATFORM_VERSION
+  var advertisingTrackingStatus: AdvertisingTrackingStatus = .unspecified
   var stubbedIsDataProcessingRestricted = false
   var stubbedIsAutoLogAppEventsEnabled = false
   var stubbedInstallTimestamp: Date?
@@ -70,6 +71,10 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
 
   var advertiserTrackingEnabledTimestamp: Date? {
     stubbedSetAdvertiserTrackingEnabledTimestamp
+  }
+
+  var graphAPIVersion: String {
+    stubbedGraphAPIVersion
   }
 
   func logWarnings() {

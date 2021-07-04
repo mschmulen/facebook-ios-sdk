@@ -16,8 +16,34 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#import "FBSDKAppEventsParameterProcessing.h"
-#import "FBSDKEventDeactivationManager.h"
+import Foundation
 
-@interface FBSDKEventDeactivationManager (AppEventsParameterProcessing) <FBSDKAppEventsParameterProcessing>
-@end
+@objcMembers
+class TestGamingServiceController: NSObject, GamingServiceControllerProtocol {
+  var capturedArgument: String?
+
+  func call(withArgument argument: String) {
+    capturedArgument = argument
+  }
+}
+
+@objcMembers
+class TestGamingServiceControllerFactory: NSObject, GamingServiceControllerCreating {
+
+  var capturedServiceType: GamingServiceType = .friendFinder
+  var capturedCompletion: GamingServiceResultCompletionHandler = { _, _, _ in }
+  var capturedPendingResult: Any?
+  var controller = TestGamingServiceController()
+
+  func create(
+    with serviceType: GamingServiceType,
+    completionHandler: @escaping GamingServiceResultCompletionHandler,
+    pendingResult: Any?
+  ) -> GamingServiceControllerProtocol {
+    capturedServiceType = serviceType
+    capturedCompletion = completionHandler
+    capturedPendingResult = pendingResult
+
+    return controller
+  }
+}
