@@ -25,12 +25,13 @@
 
 #import <objc/runtime.h>
 
-#import "FBSDKAEMReporter.h"
 #import "FBSDKAccessToken.h"
+#import "FBSDKAdvertiserIDProviding.h"
 #import "FBSDKAppEventsConfiguration.h"
 #import "FBSDKAppEventsConfigurationProviding.h"
 #import "FBSDKAppEventsDeviceInfo.h"
 #import "FBSDKAppEventsParameterProcessing.h"
+#import "FBSDKAppEventsReporter.h"
 #import "FBSDKAppEventsState.h"
 #import "FBSDKAppEventsStatePersisting.h"
 #import "FBSDKAppEventsStateProviding.h"
@@ -42,18 +43,17 @@
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKDataPersisting.h"
 #import "FBSDKDynamicFrameworkLoader.h"
-#import "FBSDKError.h"
+#import "FBSDKError+Internal.h"
 #import "FBSDKEventsProcessing.h"
 #import "FBSDKFeatureChecking.h"
 #import "FBSDKGateKeeperManaging.h"
 #import "FBSDKGraphRequestProtocol.h"
 #import "FBSDKGraphRequestProviding.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger.h"
 #import "FBSDKLogging.h"
 #import "FBSDKMetadataIndexing.h"
 #import "FBSDKPaymentObserving.h"
-#import "FBSDKSKAdNetworkReporter.h"
 #import "FBSDKServerConfiguration.h"
 #import "FBSDKServerConfigurationProviding.h"
 #import "FBSDKSettingsProtocol.h"
@@ -63,6 +63,7 @@
 
 #if !TARGET_OS_TV
 
+ #import "FBSDKCoreKitAEMImport.h"
  #import "FBSDKEventBindingManager.h"
  #import "FBSDKEventProcessing.h"
  #import "FBSDKHybridAppEventsScriptMessageHandler.h"
@@ -268,6 +269,7 @@ NSString *const FBSDKAPPEventsWKWebViewMessagesProtocolKey = @"fbmq-0.1";
 #define FBUnityUtilityClassName "FBUnityUtility"
 #define FBUnityUtilityUpdateBindingsSelector @"triggerUpdateBindings:"
 
+static FBSDKAppEvents *shared = nil;
 static NSString *g_overrideAppID = nil;
 static BOOL g_explicitEventsLoggedYet;
 static Class<FBSDKGateKeeperManaging> g_gateKeeperManager;
@@ -282,11 +284,6 @@ static id<FBSDKAppEventsStatePersisting> g_appEventsStateStore;
 static id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> g_eventDeactivationParameterProcessor;
 static id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing> g_restrictiveDataFilterParameterProcessor;
 
-#if !TARGET_OS_TV
-static id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider> g_onDeviceMLModelManager = nil;
-static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
-#endif
-
 @interface FBSDKAppEvents ()
 
 @property (nullable, nonatomic) id<FBSDKDataPersisting> store;
@@ -299,7 +296,15 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 @property (nullable, nonatomic) Class<FBSDKSwizzling> swizzler;
 @property (nullable, nonatomic) id<FBSDKSourceApplicationTracking, FBSDKTimeSpentRecording> timeSpentRecorder;
 @property (nonatomic, strong) id<FBSDKAppEventsStateProviding> appEventsStateProvider;
+@property (nonatomic) id<FBSDKAdvertiserIDProviding> advertiserIDProvider;
+@property (nonatomic) id<FBSDKAtePublisherCreating> atePublisherFactory;
 @property (nonatomic) BOOL isConfigured;
+
+#if !TARGET_OS_TV
+@property (nonatomic) id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider> onDeviceMLModelManager;
+@property (nonatomic) id<FBSDKMetadataIndexing> metadataIndexer;
+@property (nonatomic) id<FBSDKAppEventsReporter> skAdNetworkReporter;
+#endif
 
 @property (nonatomic, assign) BOOL disableTimer; // for testing only.
 
@@ -675,7 +680,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 {
   [self.singleton validateConfiguration];
 
-  NSString *deviceTokenString = [FBSDKInternalUtility hexadecimalStringFromData:deviceToken];
+  NSString *deviceTokenString = [FBSDKInternalUtility.sharedUtility hexadecimalStringFromData:deviceToken];
   [FBSDKAppEvents setPushNotificationsDeviceTokenString:deviceTokenString];
 }
 
@@ -895,6 +900,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
                       atePublisherFactory:(id<FBSDKAtePublisherCreating>)atePublisherFactory
                    appEventsStateProvider:(id<FBSDKAppEventsStateProviding>)appEventsStateProvider
                                  swizzler:(Class<FBSDKSwizzling>)swizzler
+                     advertiserIDProvider:(id<FBSDKAdvertiserIDProviding>)advertiserIDProvider
 {
   [FBSDKAppEvents setAppEventsConfigurationProvider:appEventsConfigurationProvider];
   [FBSDKAppEvents setServerConfigurationProvider:serverConfigurationProvider];
@@ -909,9 +915,11 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   g_restrictiveDataFilterParameterProcessor = restrictiveDataFilterParameterProcessor;
   self.swizzler = swizzler;
   self.store = store;
-  self.atePublisher = [atePublisherFactory createPublisherWithAppID:self.appID];
+  self.atePublisherFactory = atePublisherFactory;
+  self.atePublisher = [self.atePublisherFactory createPublisherWithAppID:self.appID];
   self.timeSpentRecorder = [timeSpentRecorderFactory createTimeSpentRecorder];
   self.appEventsStateProvider = appEventsStateProvider;
+  self.advertiserIDProvider = advertiserIDProvider;
 
   self.isConfigured = YES;
 
@@ -948,11 +956,13 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 
 #if !TARGET_OS_TV
 
-+ (void)configureNonTVComponentsWithOnDeviceMLModelManager:(id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider>)modelManager
+- (void)configureNonTVComponentsWithOnDeviceMLModelManager:(id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider>)modelManager
                                            metadataIndexer:(id<FBSDKMetadataIndexing>)metadataIndexer
+                                       skAdNetworkReporter:(nullable id<FBSDKAppEventsReporter>)skAdNetworkReporter;
 {
-  g_onDeviceMLModelManager = modelManager;
-  g_metadataIndexer = metadataIndexer;
+  self.onDeviceMLModelManager = modelManager;
+  self.metadataIndexer = metadataIndexer;
+  self.skAdNetworkReporter = skAdNetworkReporter;
 }
 
 #endif
@@ -1112,7 +1122,6 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 + (FBSDKAppEvents *)singleton
 {
   static dispatch_once_t onceToken;
-  static FBSDKAppEvents *shared = nil;
   dispatch_once(&onceToken, ^{
     shared = [self new];
   });
@@ -1131,9 +1140,16 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
     FBSDKAppEventsState *copy = [_appEventsState copy];
     _appEventsState = [self.appEventsStateProvider createStateWithToken:copy.tokenString
                                                                   appID:copy.appID];
-    dispatch_async(dispatch_get_main_queue(), ^{
+
+    dispatch_block_t block = ^{
       [self flushOnMainQueue:copy forReason:flushReason];
-    });
+    };
+
+  #if DEBUG && FBSDKTEST
+    block();
+  #else
+    dispatch_async(dispatch_get_main_queue(), block);
+  #endif
   }
 }
 
@@ -1201,6 +1217,8 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
     return;
   }
 
+  self.atePublisher = self.atePublisher ?: [self.atePublisherFactory createPublisherWithAppID:self.appID];
+
 #if FBSDKTEST
   [self.atePublisher publishATE];
 #else
@@ -1234,7 +1252,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
       _eventBindingManager = [FBSDKEventBindingManager new];
     }
 
-    if ([FBSDKInternalUtility isUnity]) {
+    if ([FBSDKInternalUtility.sharedUtility isUnity]) {
       [FBSDKAppEvents sendEventBindingsToUnity];
     } else {
       FBSDKEventBindingManager *manager = [[FBSDKEventBindingManager alloc] initWithSwizzler:self.swizzler
@@ -1284,12 +1302,12 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
       }];
       [g_featureChecker checkFeature:FBSDKFeatureAAM completionBlock:^(BOOL enabled) {
         if (enabled) {
-          [g_metadataIndexer enable];
+          [self.metadataIndexer enable];
         }
       }];
       [g_featureChecker checkFeature:FBSDKFeaturePrivacyProtection completionBlock:^(BOOL enabled) {
         if (enabled) {
-          [g_onDeviceMLModelManager enable];
+          [self.onDeviceMLModelManager enable];
         }
       }];
       if (@available(iOS 11.3, *)) {
@@ -1299,7 +1317,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
               [SKAdNetwork registerAppForAdNetworkAttribution];
               [g_featureChecker checkFeature:FBSDKFeatureSKAdNetworkConversionValue completionBlock:^(BOOL SKAdNetworkConversionValueEnabled) {
                 if (SKAdNetworkConversionValueEnabled) {
-                  [FBSDKSKAdNetworkReporter enable];
+                  [self.skAdNetworkReporter enable];
                 }
               }];
             }
@@ -1309,7 +1327,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
       if (@available(iOS 14.0, *)) {
         [g_featureChecker checkFeature:FBSDKFeatureAEM completionBlock:^(BOOL AEMEnabled) {
           if (AEMEnabled) {
-            [FBSDKAEMReporter enable];
+            [FBAEMReporter enable];
           }
         }];
       }
@@ -1345,12 +1363,15 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   }
 #if !TARGET_OS_TV
   // Update conversion value for SKAdNetwork if needed
-  [FBSDKSKAdNetworkReporter recordAndUpdateEvent:eventName currency:[FBSDKTypeUtility dictionary:parameters objectForKey:FBSDKAppEventParameterNameCurrency ofType:NSString.class] value:valueToSum];
+  [self.skAdNetworkReporter recordAndUpdateEvent:eventName
+                                        currency:[FBSDKTypeUtility dictionary:parameters objectForKey:FBSDKAppEventParameterNameCurrency ofType:NSString.class]
+                                           value:valueToSum
+                                      parameters:parameters];
   // Update conversion value for AEM if needed
-  [FBSDKAEMReporter recordAndUpdateEvent:eventName
-                                currency:[FBSDKTypeUtility dictionary:parameters objectForKey:FBSDKAppEventParameterNameCurrency ofType:NSString.class]
-                                   value:valueToSum
-                              parameters:parameters];
+  [FBAEMReporter recordAndUpdateEvent:eventName
+                             currency:[FBSDKTypeUtility dictionary:parameters objectForKey:FBSDKAppEventParameterNameCurrency ofType:NSString.class]
+                                value:valueToSum
+                           parameters:parameters];
 #endif
 
   if ([FBSDKAppEventsUtility shouldDropAppEvent]) {
@@ -1389,8 +1410,8 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 
 #if !TARGET_OS_TV
   // Filter out restrictive data with on-device ML
-  if (g_onDeviceMLModelManager.integrityParametersProcessor) {
-    parameters = [g_onDeviceMLModelManager.integrityParametersProcessor processParameters:parameters eventName:eventName];
+  if (self.onDeviceMLModelManager.integrityParametersProcessor) {
+    parameters = [self.onDeviceMLModelManager.integrityParametersProcessor processParameters:parameters eventName:eventName];
   }
 #endif
   // Filter out restrictive keys
@@ -1682,7 +1703,8 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   if (!self.isConfigured) {
     static NSString *const reason = @"As of v9.0, you must initialize the SDK prior to calling any methods or setting any properties. "
     "You can do this by calling `FBSDKApplicationDelegate`'s `application:didFinishLaunchingWithOptions:` method. "
-    "Learn more: https://developers.facebook.com/docs/ios/getting-started";
+    "Learn more: https://developers.facebook.com/docs/ios/getting-started"
+    "If no `UIApplication` is available you can use `FBSDKApplicationDelegate`'s `initializeSDK` method.";
     @throw [NSException exceptionWithName:@"InvalidOperationException" reason:reason userInfo:nil];
   }
 #endif
@@ -1710,7 +1732,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   if (!accessToken) {
     // We don't have a logged in user, so we need some form of udid representation. Prefer advertiser ID if
     // available. Note that this function only makes sense to be called in the context of advertising.
-    udid = [FBSDKAppEventsUtility.shared advertiserID];
+    udid = [self.singleton.advertiserIDProvider advertiserID];
     if (!udid) {
       // No udid, and no user token.  No point in making the request.
       return nil;
@@ -1734,7 +1756,7 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 
 #pragma mark - Testability
 
-#if DEBUG
+#if DEBUG && FBSDKTEST
 
 + (void)reset
 {
@@ -1742,6 +1764,11 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
   [self resetApplicationState];
   g_gateKeeperManager = nil;
   g_graphRequestProvider = nil;
+}
+
++ (void)setSingletonInstanceToInstance:(FBSDKAppEvents *)appEvents
+{
+  shared = appEvents;
 }
 
 + (void)resetApplicationState
@@ -1810,16 +1837,6 @@ static id<FBSDKMetadataIndexing> g_metadataIndexer = nil;
 }
 
  #if !TARGET_OS_TV
-
-+ (id<FBSDKEventProcessing, FBSDKIntegrityParametersProcessorProvider>)onDeviceMLModelManager
-{
-  return g_onDeviceMLModelManager;
-}
-
-+ (id<FBSDKMetadataIndexing>)metadataIndexer
-{
-  return g_metadataIndexer;
-}
 
 + (id<FBSDKAppEventsParameterProcessing, FBSDKEventsProcessing>)eventDeactivationParameterProcessor
 {

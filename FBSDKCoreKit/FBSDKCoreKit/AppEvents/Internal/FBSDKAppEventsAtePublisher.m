@@ -32,7 +32,7 @@
 #import "FBSDKGraphRequestConnecting.h"
 #import "FBSDKGraphRequestProtocol.h"
 #import "FBSDKGraphRequestProviding.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger.h"
 #import "FBSDKSettingsProtocol.h"
 
@@ -82,7 +82,7 @@
   NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
   [FBSDKTypeUtility dictionary:parameters setObject:@"CUSTOM_APP_EVENTS" forKey:@"event"];
 
-  NSOperatingSystemVersion operatingSystemVersion = [FBSDKInternalUtility operatingSystemVersion];
+  NSOperatingSystemVersion operatingSystemVersion = [FBSDKInternalUtility.sharedUtility operatingSystemVersion];
   NSString *osVersion = [NSString stringWithFormat:@"%ti.%ti.%ti",
                          operatingSystemVersion.majorVersion,
                          operatingSystemVersion.minorVersion,

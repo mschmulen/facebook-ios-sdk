@@ -27,7 +27,7 @@
 #import "FBSDKGraphRequestConnection.h"
 #import "FBSDKGraphRequestConnection+GraphRequestConnecting.h"
 #import "FBSDKImageDownloader.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger.h"
 #import "FBSDKObjectDecoding.h"
 #import "FBSDKServerConfiguration+Internal.h"
@@ -268,7 +268,7 @@ typedef NS_OPTIONS(NSUInteger, FBSDKServerConfigurationManagerAppEventsFeatures)
 
 + (FBSDKGraphRequest *)requestToLoadServerConfiguration:(NSString *)appID
 {
-  NSOperatingSystemVersion operatingSystemVersion = [FBSDKInternalUtility operatingSystemVersion];
+  NSOperatingSystemVersion operatingSystemVersion = [FBSDKInternalUtility.sharedUtility operatingSystemVersion];
   NSString *osVersion = [NSString stringWithFormat:@"%ti.%ti.%ti",
                          operatingSystemVersion.majorVersion,
                          operatingSystemVersion.minorVersion,

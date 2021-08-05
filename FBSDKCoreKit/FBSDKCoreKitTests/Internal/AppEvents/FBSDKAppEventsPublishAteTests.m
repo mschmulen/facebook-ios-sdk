@@ -23,7 +23,6 @@
 #import "FBSDKAppEvents+AppEventsConfiguring.h"
 #import "FBSDKAppEventsAtePublisher.h"
 #import "FBSDKCoreKitTests-Swift.h"
-#import "UserDefaultsSpy.h"
 
 @interface FBSDKAppEvents (Testing)
 @property (nullable, nonatomic) id<FBSDKAtePublishing> atePublisher;
@@ -98,7 +97,8 @@
     restrictiveDataFilterParameterProcessor:[TestAppEventsParameterProcessor new]
                         atePublisherFactory:factory
                      appEventsStateProvider:[TestAppEventsStateProvider new]
-                                   swizzler:TestSwizzler.class];
+                                   swizzler:TestSwizzler.class
+                       advertiserIDProvider:[TestAdvertiserIDProvider new]];
 
   [appEvents publishATE];
   XCTAssertTrue(

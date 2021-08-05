@@ -25,7 +25,7 @@
  #import "FBSDKAccessToken.h"
  #import "FBSDKAuthenticationToken.h"
  #import "FBSDKCoreKitBasicsImport.h"
- #import "FBSDKInternalUtility.h"
+ #import "FBSDKInternalUtility+Internal.h"
  #import "FBSDKLogger.h"
  #import "FBSDKProfile.h"
 
@@ -84,10 +84,10 @@ static NSString *const FBSDKOIDCStatusPath = @"/platform/oidc/status";
   NSDictionary *params = @{@"id_token" : token.tokenString};
   NSError *error;
 
-  NSURL *requestURL = [FBSDKInternalUtility unversionedFacebookURLWithHostPrefix:@"m"
-                                                                            path:FBSDKOIDCStatusPath
-                                                                 queryParameters:params
-                                                                           error:&error];
+  NSURL *requestURL = [FBSDKInternalUtility.sharedUtility unversionedFacebookURLWithHostPrefix:@"m"
+                                                                                          path:FBSDKOIDCStatusPath
+                                                                               queryParameters:params
+                                                                                         error:&error];
   return error == nil ? requestURL : nil;
 }
 

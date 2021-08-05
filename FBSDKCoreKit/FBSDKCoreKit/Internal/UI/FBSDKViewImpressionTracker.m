@@ -24,7 +24,7 @@
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKEventLogging.h"
 #import "FBSDKGraphRequestProviding.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKNotificationProtocols.h"
 
 @interface FBSDKViewImpressionTracker ()
@@ -64,6 +64,9 @@ static dispatch_once_t token;
                                             eventLogger:eventLogger
                                    notificationObserver:notificationObserver
                                             tokenWallet:tokenWallet];
+    if (!_impressionTrackers) {
+      _impressionTrackers = [NSMutableDictionary new];
+    }
     [FBSDKTypeUtility dictionary:_impressionTrackers setObject:impressionTracker forKey:eventName];
   }
   return impressionTracker;

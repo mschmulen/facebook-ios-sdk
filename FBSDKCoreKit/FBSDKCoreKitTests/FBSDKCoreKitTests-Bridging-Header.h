@@ -20,7 +20,6 @@
 #import <AdSupport/AdSupport.h>
 
 #import "FBSDKAdvertisingTrackingStatus.h"
-#import "AEM+Testing.h"
 #import "ApplicationDelegate+Testing.h"
 #import "AppEventsAtePublisher+Testing.h"
 #import "BackgroundEventLogger+Testing.h"
@@ -34,6 +33,7 @@
 #import "FBSDKAppEventsFlushReason.h"
 #import "FBSDKAppEventsNumberParser.h"
 #import "FBSDKAppEventsUtility.h"
+#import "FBSDKAppEventsUtility+AdvertiserIDProviding.h"
 #import "FBSDKAppEvents+AppEventsConfiguring.h"
 #import "FBSDKAppEvents+ApplicationActivating.h"
 #import "FBSDKAppEvents+ApplicationLifecycleObserving.h"
@@ -42,6 +42,7 @@
 #import "FBSDKAppLinkUtility+Testing.h"
 #import "FBSDKAppURLSchemeProviding.h"
 #import "FBSDKInternalUtility+AppURLSchemeProviding.h"
+#import "FBSDKInternalUtility+Testing.h"
 #import "FBSDKAtePublisherCreating.h"
 #import "FBSDKAtePublisherFactory.h"
 #import "FBSDKAuthenticationStatusUtility.h"
@@ -80,8 +81,6 @@
 #import "FBSDKSKAdNetworkEvent.h"
 #import "FBSDKSKAdNetworkRule.h"
 #import "FBSDKSKAdNetworkReporter.h"
-#import "FBSDKServerConfigurationFixtures.h"
-#import "FBSDKTestCase.h"
 #import "FBSDKTestCoder.h"
 #import "FBSDKURLOpener.h"
 #import "FBSDKViewHierarchy.h"
@@ -98,9 +97,9 @@
 #import "FBSDKProductRequestFactory.h"
 #import "SuggestedEventsIndexer+Testing.h"
 #import "UIApplication+URLOpener.h"
-#import "UserDefaultsSpy.h"
 #import "WebViewAppLinkResolver+Testing.h"
 #import "FBSDKConversionValueUpdating.h"
+#import "XCTestCase+Extensions.h"
 // URLSession Abstraction
 #import "FBSDKURLSessionProxyProviding.h"
 #import "FBSDKURLSessionProxyFactory.h"
@@ -178,11 +177,13 @@
 // Profile
 #import "FBSDKProfileProtocols.h"
 #import "FBSDKProfile+ProfileProtocols.h"
+// AppEvents Reporter
+#import "FBSDKAppEventsReporter.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 // Interfaces for Swift extensions on Objective-C Test classes
-@interface FBSDKAppEventsUtilityTests : FBSDKTestCase
+@interface FBSDKAppEventsUtilityTests : XCTestCase
 @end
 
 // Categories needed to expose private methods to Swift
@@ -324,15 +325,6 @@ NS_SWIFT_NAME(configure(store:appEventsConfigurationProvider:infoDictionaryProvi
 
 @end
 
-@interface FBSDKInternalUtility (Testing)
-
-@property (class, nonatomic, nullable) id<FBSDKInfoDictionaryProviding> infoDictionaryProvider;
-
-+ (void)configureWithInfoDictionaryProvider:(id<FBSDKInfoDictionaryProviding>)infoDictionaryProvider;
-+ (void)reset;
-
-@end
-
 @interface FBSDKGraphRequestPiggybackManager (Testing)
 
 @property (class, nonatomic, nullable) Class<FBSDKAccessTokenProviding, FBSDKAccessTokenSetting> tokenWallet;
@@ -416,21 +408,15 @@ NS_SWIFT_NAME(cachedAppLinks);
 
 @end
 
-// Hack to be able to test from Swift code that NSExceptions were raised.
-@interface XCTestCase (Testing)
-
-- (void)assertRaisesExceptionWithMessage:(NSString *)message block:(void (^)(void))block
-NS_SWIFT_NAME(assertRaisesException(message:block:));
-
+// Needed to expose this private method to AppLinkResolverRequestBuilderTests
+@interface FBSDKAppLinkResolverRequestBuilder (FBSDKAppLinkResolverTests)
+- (instancetype)initWithUserInterfaceIdiom:(UIUserInterfaceIdiom)userInterfaceIdiom;
 @end
 
-@implementation XCTestCase (Testing)
-
-- (void)assertRaisesExceptionWithMessage:(NSString *)message block:(void (^)(void))block  {
-  XCTAssertThrows(block(), @"%@", message);
-}
-
+// Needed to expose private methods to the ServerConfigurationFixtures class
+@interface FBSDKServerConfiguration (ServerConfigurationFixtures)
+- (nullable NSDictionary *)dialogConfigurations;
+- (nullable NSDictionary *)dialogFlows;
 @end
-
 
 NS_ASSUME_NONNULL_END
