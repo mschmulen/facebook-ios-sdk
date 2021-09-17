@@ -25,14 +25,14 @@
  #import "FBSDKBridgeAPIProtocolNativeV1.h"
  #import "FBSDKCoreKitBasicsImport.h"
  #import "FBSDKDialogConfiguration.h"
- #import "FBSDKError.h"
- #import "FBSDKInternalUtility.h"
- #import "FBSDKServerConfigurationManager.h"
+ #import "FBSDKError+Internal.h"
+ #import "FBSDKInternalUtility+Internal.h"
+ #import "FBSDKServerConfigurationManager+ServerConfigurationProviding.h"
  #import "FBSDKServerConfigurationProviding.h"
 
 @interface FBSDKBridgeAPIProtocolWebV2 ()
 
-@property (nonatomic, readonly) Class<FBSDKServerConfigurationProviding> serverConfigurationProvider;
+@property (nonatomic, readonly) id<FBSDKServerConfigurationProviding> serverConfigurationProvider;
 @property (nonatomic, readonly) id<FBSDKBridgeAPIProtocol> nativeBridge;
 
 @end
@@ -43,14 +43,14 @@
 
 - (instancetype)init
 {
-  return [self initWithServerConfigurationProvider:FBSDKServerConfigurationManager.class
+  return [self initWithServerConfigurationProvider:FBSDKServerConfigurationManager.shared
                                       nativeBridge:[[FBSDKBridgeAPIProtocolNativeV1 alloc] initWithAppScheme:nil
                                                                                                   pasteboard:nil
                                                                                          dataLengthThreshold:0
                                                                                               includeAppIcon:NO]];
 }
 
-- (instancetype)initWithServerConfigurationProvider:(Class<FBSDKServerConfigurationProviding>)serverConfigurationProvider
+- (instancetype)initWithServerConfigurationProvider:(id<FBSDKServerConfigurationProviding>)serverConfigurationProvider
                                        nativeBridge:(id<FBSDKBridgeAPIProtocol>)nativeBridge
 {
   if ((self = [super init])) {
@@ -72,18 +72,18 @@
                                                    invalidObjectHandler:NULL];
     queryParameters = @{ FBSDKBridgeAPIProtocolNativeV1InputKeys.bridgeArgs : bridgeArgsString };
   }
-  return [FBSDKInternalUtility appURLWithHost:@"bridge" path:methodName queryParameters:queryParameters error:errorRef];
+  return [FBSDKInternalUtility.sharedUtility appURLWithHost:@"bridge" path:methodName queryParameters:queryParameters error:errorRef];
 }
 
 - (NSURL *)_requestURLForDialogConfiguration:(FBSDKDialogConfiguration *)dialogConfiguration error:(NSError **)errorRef
 {
   NSURL *requestURL = dialogConfiguration.URL;
   if (!requestURL.scheme) {
-    requestURL = [FBSDKInternalUtility facebookURLWithHostPrefix:@"m"
-                                                            path:requestURL.path
-                                                 queryParameters:@{}
-                                                  defaultVersion:@""
-                                                           error:errorRef];
+    requestURL = [FBSDKInternalUtility.sharedUtility facebookURLWithHostPrefix:@"m"
+                                                                          path:requestURL.path
+                                                               queryParameters:@{}
+                                                                defaultVersion:@""
+                                                                         error:errorRef];
   }
   return requestURL;
 }
@@ -125,11 +125,11 @@
   if (!requestURL) {
     return nil;
   }
-  return [FBSDKInternalUtility URLWithScheme:requestURL.scheme
-                                        host:requestURL.host
-                                        path:requestURL.path
-                             queryParameters:queryParameters
-                                       error:errorRef];
+  return [FBSDKInternalUtility.sharedUtility URLWithScheme:requestURL.scheme
+                                                      host:requestURL.host
+                                                      path:requestURL.path
+                                           queryParameters:queryParameters
+                                                     error:errorRef];
 }
 
 - (NSDictionary *)responseParametersForActionID:(NSString *)actionID

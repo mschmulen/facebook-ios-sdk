@@ -29,17 +29,32 @@
 @import FBSDKCoreKit;
 #endif
 
-#import "FBSDKCoreKit+Internal.h"
 #import "FBSDKHashtag.h"
 #import "FBSDKShareDefines.h"
-#import "FBSDKShareDialog.h"
+#import "FBSDKShareDialog+Testing.h"
 #import "FBSDKShareKitTestUtility.h"
 #import "FBSDKShareModelTestUtility.h"
+#import "FBSDKShareUtility.h"
+#import "FBSDKSocialComposeViewControllerFactory.h"
 
 @interface FBSDKShareDialogTests : XCTestCase
 @end
 
 @implementation FBSDKShareDialogTests
+
+- (void)setUp
+{
+  [super setUp];
+
+  [FBSDKShareDialog resetClassDependencies];
+}
+
+- (void)tearDown
+{
+  [FBSDKShareDialog resetClassDependencies];
+
+  [super tearDown];
+}
 
 - (void)_mockApplicationForURL:(NSURL *)URL canOpen:(BOOL)canOpen usingBlock:(void (^)(void))block
 {
@@ -56,32 +71,52 @@
   }
 }
 
-- (void)_mockUseNativeDialogUsingBlock:(void (^)(void))block
-{
-  if (block != NULL) {
-    id configurationMock = [OCMockObject mockForClass:[FBSDKServerConfiguration class]];
-    [[[configurationMock stub] andReturnValue:@YES] useNativeDialogForDialogName:FBSDKDialogConfigurationNameShare];
-    id configurationManagerClassMock = [OCMockObject mockForClass:[FBSDKServerConfigurationManager class]];
-    [[[[configurationManagerClassMock stub] classMethod] andReturn:configurationMock] cachedServerConfiguration];
-    block();
-    [configurationManagerClassMock stopMocking];
-    [configurationMock stopMocking];
-  }
-}
-
 #pragma mark - Native
+
+- (void)testClassDependencies
+{
+  [FBSDKShareDialog new];
+
+  XCTAssertEqualObjects(
+    FBSDKShareDialog.internalURLOpener,
+    UIApplication.sharedApplication,
+    @"FBSDKShareDialog should use the shared application for its default internal URL opener dependency"
+  );
+  XCTAssertEqualObjects(
+    FBSDKShareDialog.internalUtility,
+    FBSDKInternalUtility.sharedUtility,
+    @"FBSDKShareDialog should use the shared utility for its default internal utility dependency"
+  );
+  XCTAssertEqualObjects(
+    FBSDKShareDialog.settings,
+    FBSDKSettings.sharedSettings,
+    @"FBSDKShareDialog should use the shared settings for its default settings dependency"
+  );
+  XCTAssertEqualObjects(
+    FBSDKShareDialog.shareUtility,
+    FBSDKShareUtility.self,
+    @"FBSDKShareDialog should use the share utility class for its default share utility dependency"
+  );
+  XCTAssertEqualObjects(
+    FBSDKShareDialog.bridgeAPIRequestOpener,
+    FBSDKBridgeAPI.sharedInstance,
+    @"FBSDKShareDialog should use the shared bridge API for its default bridge API request opening dependency"
+  );
+  XCTAssertTrue(
+    [(NSObject *)FBSDKShareDialog.socialComposeViewControllerFactory isMemberOfClass:FBSDKSocialComposeViewControllerFactory.class],
+    @"FBSDKShareDialog should create a new factory for its social compose view controller factory dependency by default"
+  );
+}
 
 - (void)testCanShowNativeDialogWithoutShareContent
 {
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
   [self _mockApplicationForURL:OCMOCK_ANY canOpen:YES usingBlock:^{
-    [self _mockUseNativeDialogUsingBlock:^{
-      XCTAssertTrue(
-        [dialog canShow],
-        @"A dialog without share content should be showable on a native dialog"
-      );
-    }];
+    XCTAssertTrue(
+      [dialog canShow],
+      @"A dialog without share content should be showable on a native dialog"
+    );
   }];
 }
 
@@ -89,39 +124,33 @@
 {
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
-  [self _mockUseNativeDialogUsingBlock:^{
-    dialog.shareContent = [FBSDKShareModelTestUtility linkContent];
-    XCTAssertTrue(
-      [dialog canShow],
-      @"A dialog with valid link content should be showable on a native dialog"
-    );
-  }];
+  dialog.shareContent = [FBSDKShareModelTestUtility linkContent];
+  XCTAssertTrue(
+    [dialog canShow],
+    @"A dialog with valid link content should be showable on a native dialog"
+  );
 }
 
 - (void)testCanShowNativePhotoContent
 {
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
-  [self _mockUseNativeDialogUsingBlock:^{
-    dialog.shareContent = [FBSDKShareModelTestUtility photoContent];
-    XCTAssertFalse(
-      [dialog canShow],
-      @"Photo content with photos that have web urls should not be showable on a native dialog"
-    );
-  }];
+  dialog.shareContent = [FBSDKShareModelTestUtility photoContent];
+  XCTAssertFalse(
+    [dialog canShow],
+    @"Photo content with photos that have web urls should not be showable on a native dialog"
+  );
 }
 
 - (void)testCanShowNativePhotoContentWithFileURL
 {
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
-  [self _mockUseNativeDialogUsingBlock:^{
-    dialog.shareContent = [FBSDKShareModelTestUtility photoContentWithFileURLs];
-    XCTAssertTrue(
-      [dialog canShow],
-      @"Photo content with photos that have file urls should be showable on a native dialog"
-    );
-  }];
+  dialog.shareContent = [FBSDKShareModelTestUtility photoContentWithFileURLs];
+  XCTAssertTrue(
+    [dialog canShow],
+    @"Photo content with photos that have file urls should be showable on a native dialog"
+  );
 }
 
 - (void)testCanShowNativeVideoContentWithoutPreviewPhoto
@@ -129,13 +158,11 @@
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
   [self _mockApplicationForURL:OCMOCK_ANY canOpen:YES usingBlock:^{
-    [self _mockUseNativeDialogUsingBlock:^{
-      dialog.shareContent = [FBSDKShareModelTestUtility videoContentWithoutPreviewPhoto];
-      XCTAssertTrue(
-        [dialog canShow],
-        @"Video content without a preview photo should be showable on a native dialog"
-      );
-    }];
+    dialog.shareContent = [FBSDKShareModelTestUtility videoContentWithoutPreviewPhoto];
+    XCTAssertTrue(
+      [dialog canShow],
+      @"Video content without a preview photo should be showable on a native dialog"
+    );
   }];
 }
 
@@ -144,12 +171,10 @@
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
   dialog.mode = FBSDKShareDialogModeNative;
   [self _mockApplicationForURL:OCMOCK_ANY canOpen:NO usingBlock:^{
-    [self _mockUseNativeDialogUsingBlock:^{
-      XCTAssertFalse(
-        [dialog canShow],
-        @"A native dialog should not be showable if the application is unable to open a url, this can also occur if the api scheme is not whitelisted in the third party app or if the application cannot handle the share API scheme"
-      );
-    }];
+    XCTAssertFalse(
+      [dialog canShow],
+      @"A native dialog should not be showable if the application is unable to open a url, this can also occur if the api scheme is not whitelisted in the third party app or if the application cannot handle the share API scheme"
+    );
   }];
 }
 
@@ -437,49 +462,44 @@
 
   // When native is available.
   [self _mockApplicationForURL:OCMOCK_ANY canOpen:YES usingBlock:^{
-    [self _mockUseNativeDialogUsingBlock:^{
-      // Check supported modes
-      NSError *error;
-      dialog.mode = FBSDKShareDialogModeAutomatic;
-      XCTAssertTrue([dialog validateWithError:&error]);
-      XCTAssertNil(error);
-      dialog.mode = FBSDKShareDialogModeNative;
-      XCTAssertTrue([dialog validateWithError:&error]);
-      XCTAssertNil(error);
+    // Check supported modes
+    NSError *error;
+    dialog.mode = FBSDKShareDialogModeAutomatic;
+    XCTAssertTrue([dialog validateWithError:&error]);
+    XCTAssertNil(error);
+    dialog.mode = FBSDKShareDialogModeNative;
+    XCTAssertTrue([dialog validateWithError:&error]);
+    XCTAssertNil(error);
 
-      // Check unsupported modes
-      dialog.mode = FBSDKShareDialogModeWeb;
-      error = nil;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-      dialog.mode = FBSDKShareDialogModeBrowser;
-      error = nil;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-      error = nil;
-      dialog.mode = FBSDKShareDialogModeShareSheet;
-      error = nil;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-      dialog.mode = FBSDKShareDialogModeFeedWeb;
-      error = nil;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-      dialog.mode = FBSDKShareDialogModeFeedBrowser;
-      error = nil;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-    }];
+    // Check unsupported modes
+    dialog.mode = FBSDKShareDialogModeWeb;
+    error = nil;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
+    dialog.mode = FBSDKShareDialogModeBrowser;
+    error = nil;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
+    error = nil;
+    dialog.mode = FBSDKShareDialogModeShareSheet;
+    error = nil;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
+    dialog.mode = FBSDKShareDialogModeFeedWeb;
+    error = nil;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
+    dialog.mode = FBSDKShareDialogModeFeedBrowser;
+    error = nil;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
   }];
 
-  // When native isn't available.
   [self _mockApplicationForURL:OCMOCK_ANY canOpen:NO usingBlock:^{
-    [self _mockUseNativeDialogUsingBlock:^{
-      NSError *error;
-      dialog.mode = FBSDKShareDialogModeAutomatic;
-      XCTAssertFalse([dialog validateWithError:&error]);
-      XCTAssertNotNil(error);
-    }];
+    NSError *error;
+    dialog.mode = FBSDKShareDialogModeAutomatic;
+    XCTAssertFalse([dialog validateWithError:&error]);
+    XCTAssertNotNil(error);
   }];
 }
 
@@ -564,9 +584,11 @@
     return ![url.absoluteString isEqualToString:nonSupportedScheme];
   }]];
   id mockInternalUtility = [OCMockObject niceMockForClass:[FBSDKInternalUtility class]];
-  id mockSLController = [OCMockObject niceMockForClass:[fbsdkdfl_SLComposeViewControllerClass() class]];
-  [[[mockSLController stub] andReturn:mockSLController] composeViewControllerForServiceType:OCMOCK_ANY];
-  [[[mockSLController stub] andReturnValue:@YES] isAvailableForServiceType:OCMOCK_ANY];
+  id mockSocialComposeViewController = [OCMockObject niceMockForClass:[SLComposeViewController class]];
+  [[[mockSocialComposeViewController stub] andReturnValue:@YES] isAvailableForServiceType:OCMOCK_ANY];
+
+  [FBSDKShareDialog resetClassDependencies];
+  [FBSDKShareDialog configureClassDependencies];
 
   UIViewController *vc = [UIViewController new];
   FBSDKShareDialog *const dialog = [FBSDKShareDialog new];
@@ -585,7 +607,7 @@
 
   [mockApplication stopMocking];
   [mockInternalUtility stopMocking];
-  [mockSLController stopMocking];
+  [mockSocialComposeViewController stopMocking];
 }
 
 - (void)  _showDialog:(FBSDKShareDialog *)dialog
@@ -597,9 +619,11 @@
   [[[mockApplication stub] andReturn:mockApplication] sharedApplication];
   [[[mockApplication stub] andReturnValue:@YES] canOpenURL:OCMOCK_ANY];
   id mockInternalUtility = [OCMockObject niceMockForClass:[FBSDKInternalUtility class]];
-  id settingsClassMock = [OCMockObject niceMockForClass:[FBSDKSettings class]];
-  OCMStub(ClassMethod([settingsClassMock appID])).andReturn(appID);
-  id mockSLController = [OCMockObject niceMockForClass:[fbsdkdfl_SLComposeViewControllerClass() class]];
+  id settingsMock = [OCMockObject niceMockForClass:FBSDKSettings.class];
+  [[[settingsMock stub] andReturn:settingsMock] sharedSettings];
+  [[[settingsMock stub] andReturn:appID] appID];
+
+  id mockSLController = [OCMockObject niceMockForClass:[SLComposeViewController class]];
   [[[mockSLController stub] andReturn:mockSLController] composeViewControllerForServiceType:OCMOCK_ANY];
   [[[mockSLController stub] andReturnValue:@YES] isAvailableForServiceType:OCMOCK_ANY];
   [[mockSLController expect] setInitialText:[OCMArg checkWithBlock:^BOOL (NSString *text) {
@@ -617,6 +641,9 @@
     && ((expectedJSON == nil && json == nil) || [expectedJSON isEqual:json]);
   }]];
 
+  [FBSDKShareDialog resetClassDependencies];
+  [FBSDKShareDialog configureClassDependencies];
+
   UIViewController *vc = [UIViewController new];
   dialog.fromViewController = vc;
   dialog.mode = FBSDKShareDialogModeShareSheet;
@@ -624,7 +651,7 @@
   [mockSLController verify];
 
   [mockSLController stopMocking];
-  [settingsClassMock stopMocking];
+  [settingsMock stopMocking];
   [mockApplication stopMocking];
   [mockInternalUtility stopMocking];
 }
@@ -655,6 +682,9 @@
                           useSafariViewController:(BOOL)OCMOCK_ANY
                                fromViewController:OCMOCK_ANY
                                   completionBlock:OCMOCK_ANY];
+
+  [FBSDKShareDialog resetClassDependencies];
+  [FBSDKShareDialog configureClassDependencies];
 
   UIViewController *vc = [UIViewController new];
   dialog.fromViewController = vc;

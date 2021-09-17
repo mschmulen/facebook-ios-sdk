@@ -20,12 +20,6 @@
 
 #import <FBSDKLoginKit/FBSDKDeviceLoginManager.h>
 
-#ifdef FBSDKCOCOAPODS
- #import <FBSDKCoreKit/FBSDKCoreKit+Internal.h>
-#else
- #import "FBSDKCoreKit+Internal.h"
-#endif
-
 @interface FBSDKDeviceLoginViewController () <
   FBSDKDeviceLoginManagerDelegate
 >
@@ -70,8 +64,10 @@
   id<FBSDKDeviceLoginViewControllerDelegate> delegate = self.delegate;
   self.delegate = nil;
 
+  NSUInteger smartLoginOptions = FBSDKServerConfigurationProvider.cachedSmartLoginOptions;
+  NSUInteger smartLoginRequireConfirmation = 1 << 1;
   FBSDKAccessToken *token = result.accessToken;
-  BOOL requireConfirm = (([FBSDKServerConfigurationManager cachedServerConfiguration].smartLoginOptions & FBSDKServerConfigurationSmartLoginOptionsRequireConfirmation)
+  BOOL requireConfirm = ((smartLoginOptions & smartLoginRequireConfirmation)
     && (token != nil)
     && !_isRetry);
   if (requireConfirm) {
@@ -91,7 +87,7 @@
     NSString *networkErrorMessage = NSLocalizedStringWithDefaultValue(
       @"LoginError.SystemAccount.Network",
       @"FacebookSDK",
-      [FBSDKInternalUtility bundleForStrings],
+      [FBSDKInternalUtility.sharedUtility bundleForStrings],
       @"Unable to connect to Facebook. Check your network connection and try again.",
       @"The user facing error message when the Accounts framework encounters a network error."
     );
@@ -99,7 +95,7 @@
     NSString *localizedOK = NSLocalizedStringWithDefaultValue(
       @"ErrorRecovery.Alert.OK",
       @"FacebookSDK",
-      [FBSDKInternalUtility bundleForStrings],
+      [FBSDKInternalUtility.sharedUtility bundleForStrings],
       @"OK",
       @"The title of the label to dismiss the alert when presenting user facing error messages"
     );
@@ -164,7 +160,7 @@
   NSLocalizedStringWithDefaultValue(
     @"SmartLogin.ConfirmationTitle",
     @"FacebookSDK",
-    [FBSDKInternalUtility bundleForStrings],
+    [FBSDKInternalUtility.sharedUtility bundleForStrings],
     @"Confirm Login",
     @"The title for the alert when smart login requires confirmation"
   );
@@ -172,7 +168,7 @@
   NSLocalizedStringWithDefaultValue(
     @"SmartLogin.NotYou",
     @"FacebookSDK",
-    [FBSDKInternalUtility bundleForStrings],
+    [FBSDKInternalUtility.sharedUtility bundleForStrings],
     @"Not you?",
     @"The cancel label for the alert when smart login requires confirmation"
   );
@@ -180,7 +176,7 @@
   NSLocalizedStringWithDefaultValue(
     @"SmartLogin.Continue",
     @"FacebookSDK",
-    [FBSDKInternalUtility bundleForStrings],
+    [FBSDKInternalUtility.sharedUtility bundleForStrings],
     @"Continue as %@",
     @"The format string to continue as <name> for the alert when smart login requires confirmation"
   );
@@ -216,9 +212,10 @@
   _loginManager.delegate = nil;
   [_loginManager cancel];
   _loginManager = nil;
-
+  NSUInteger smartLoginOptions = FBSDKServerConfigurationProvider.cachedSmartLoginOptions;
+  NSUInteger smartLoginRequireConfirmation = 1 << 0;
   BOOL enableSmartLogin = (!_isRetry
-    && ([FBSDKServerConfigurationManager cachedServerConfiguration].smartLoginOptions & FBSDKServerConfigurationSmartLoginOptionsEnabled));
+    && (smartLoginOptions & smartLoginRequireConfirmation));
   _loginManager = [[FBSDKDeviceLoginManager alloc] initWithPermissions:_permissions
                                                       enableSmartLogin:enableSmartLogin];
   _loginManager.delegate = self;

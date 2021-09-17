@@ -23,9 +23,9 @@
  #import "FBSDKLikeDialog.h"
 
  #ifdef FBSDKCOCOAPODS
-  #import <FBSDKCoreKit/FBSDKCoreKit+Internal.h>
+  #import <FBSDKCoreKit/FBSDKCoreKit.h>
  #else
-  #import "FBSDKCoreKit+Internal.h"
+  #import "FBSDKCoreKitImport.h"
  #endif
 
  #import "FBSDKCoreKitBasicsImportForShareKit.h"
@@ -40,13 +40,6 @@
  #define FBSDK_SHARE_RESULT_COMPLETION_GESTURE_VALUE_UNLIKE @"unlike"
 
  #pragma mark - Class Methods
-
-+ (void)initialize
-{
-  if ([FBSDKLikeDialog class] == self) {
-    [FBSDKServerConfigurationManager loadServerConfigurationWithCompletionBlock:NULL];
-  }
-}
 
 + (instancetype)likeWithObjectID:(NSString *)objectID
                       objectType:(FBSDKLikeObjectType)objectType
@@ -97,8 +90,8 @@
     [self _handleCompletionWithDialogResults:response.responseParameters error:response.error];
   };
 
-  FBSDKServerConfiguration *configuration = [FBSDKServerConfigurationManager cachedServerConfiguration];
-  BOOL useSafariViewController = [configuration useSafariViewControllerForDialogName:FBSDKDialogConfigurationNameLike];
+  BOOL useSafariViewController = [[FBSDKShareDialogConfiguration new]
+                                  shouldUseSafariViewControllerForDialogName:FBSDKDialogConfigurationNameLike];
   if ([self _canLikeNative]) {
     FBSDKBridgeAPIRequest *nativeRequest = [FBSDKBridgeAPIRequest bridgeAPIRequestWithProtocolType:FBSDKBridgeAPIProtocolTypeNative
                                                                                             scheme:FBSDK_CANOPENURL_FACEBOOK
@@ -150,9 +143,8 @@
 
 - (BOOL)_canLikeNative
 {
-  FBSDKServerConfiguration *configuration = [FBSDKServerConfigurationManager cachedServerConfiguration];
-  BOOL useNativeDialog = [configuration useNativeDialogForDialogName:FBSDKDialogConfigurationNameLike];
-  return (useNativeDialog && [FBSDKInternalUtility isFacebookAppInstalled]);
+  BOOL useNativeDialog = [[FBSDKShareDialogConfiguration new] shouldUseNativeDialogForDialogName:FBSDKDialogConfigurationNameLike];
+  return (useNativeDialog && [FBSDKInternalUtility.sharedUtility isFacebookAppInstalled]);
 }
 
 - (void)_handleCompletionWithDialogResults:(NSDictionary *)results error:(NSError *)error

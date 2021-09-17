@@ -18,11 +18,7 @@
 
 #import "FBSDKShareMediaContent.h"
 
-#ifdef FBSDKCOCOAPODS
- #import <FBSDKCoreKit/FBSDKCoreKit+Internal.h>
-#else
- #import "FBSDKCoreKit+Internal.h"
-#endif
+#import "FBSDKHasher.h"
 #import "FBSDKHashtag.h"
 #import "FBSDKShareConstants.h"
 #import "FBSDKSharePhoto.h"
@@ -66,7 +62,7 @@
 - (void)setPeopleIDs:(NSArray *)peopleIDs
 {
   [FBSDKShareUtility assertCollection:peopleIDs ofClass:[NSString class] name:@"peopleIDs"];
-  if (![FBSDKInternalUtility object:_peopleIDs isEqualToObject:peopleIDs]) {
+  if (![FBSDKInternalUtility.sharedUtility object:_peopleIDs isEqualToObject:peopleIDs]) {
     _peopleIDs = [peopleIDs copy];
   }
 }
@@ -74,7 +70,7 @@
 - (void)setMedia:(NSArray<id<FBSDKShareMedia>> *)media
 {
   [FBSDKShareUtility assertCollection:media ofClassStrings:@[NSStringFromClass([FBSDKSharePhoto class]), NSStringFromClass([FBSDKShareVideo class])] name:@"media"];
-  if (![FBSDKInternalUtility object:_media isEqualToObject:media]) {
+  if (![FBSDKInternalUtility.sharedUtility object:_media isEqualToObject:media]) {
     _media = [media copy];
   }
 }
@@ -153,7 +149,7 @@
     _pageID.hash,
     _shareUUID.hash,
   };
-  return [FBSDKMath hashWithIntegerArray:subhashes count:sizeof(subhashes) / sizeof(subhashes[0])];
+  return [FBSDKHasher hashWithIntegerArray:subhashes count:sizeof(subhashes) / sizeof(subhashes[0])];
 }
 
 - (BOOL)isEqual:(id)object
@@ -170,14 +166,14 @@
 - (BOOL)isEqualToShareMediaContent:(FBSDKShareMediaContent *)content
 {
   return (content
-    && [FBSDKInternalUtility object:_contentURL isEqualToObject:content.contentURL]
-    && [FBSDKInternalUtility object:_hashtag isEqualToObject:content.hashtag]
-    && [FBSDKInternalUtility object:_peopleIDs isEqualToObject:content.peopleIDs]
-    && [FBSDKInternalUtility object:_media isEqualToObject:content.media]
-    && [FBSDKInternalUtility object:_placeID isEqualToObject:content.placeID]
-    && [FBSDKInternalUtility object:_ref isEqualToObject:content.ref]
-    && [FBSDKInternalUtility object:_shareUUID isEqualToObject:content.shareUUID]
-    && [FBSDKInternalUtility object:_pageID isEqualToObject:content.pageID]);
+    && [FBSDKInternalUtility.sharedUtility object:_contentURL isEqualToObject:content.contentURL]
+    && [FBSDKInternalUtility.sharedUtility object:_hashtag isEqualToObject:content.hashtag]
+    && [FBSDKInternalUtility.sharedUtility object:_peopleIDs isEqualToObject:content.peopleIDs]
+    && [FBSDKInternalUtility.sharedUtility object:_media isEqualToObject:content.media]
+    && [FBSDKInternalUtility.sharedUtility object:_placeID isEqualToObject:content.placeID]
+    && [FBSDKInternalUtility.sharedUtility object:_ref isEqualToObject:content.ref]
+    && [FBSDKInternalUtility.sharedUtility object:_shareUUID isEqualToObject:content.shareUUID]
+    && [FBSDKInternalUtility.sharedUtility object:_pageID isEqualToObject:content.pageID]);
 }
 
 #pragma mark - NSCoding

@@ -3,7 +3,7 @@
 Pod::Spec.new do |s|
 
   s.name         = 'FBSDKCoreKit'
-  s.version      = '11.0.1'
+  s.version      = '11.2.0'
   s.summary      = 'Official Facebook SDK for iOS to access Facebook Platform core features'
 
   s.description  = <<-DESC
@@ -42,16 +42,12 @@ Pod::Spec.new do |s|
 
   s.subspec 'Core' do |ss|
     ss.dependency 'FBSDKCoreKit_Basics', "~> #{s.version}"
+    ss.dependency 'FBAEMKit', "~> #{s.version}"
     ss.exclude_files = 'Sources/FacebookCore/Exports.swift',
-                       'FBSDKCoreKit/FBSDKCoreKit/include/**/*',
                        'FBSDKCoreKit/FBSDKCoreKit/Swift/Exports.swift'
     ss.source_files = 'FBSDKCoreKit/FBSDKCoreKit/**/*.{h,hpp,m,mm}',
                       'Sources/FacebookCore/**/*.swift'
-    ss.public_header_files = 'FBSDKCoreKit/FBSDKCoreKit/*.h',
-                             'FBSDKCoreKit/FBSDKCoreKit/AppEvents/*.h',
-                             'FBSDKCoreKit/FBSDKCoreKit/AppLink/*.h',
-                             'FBSDKCoreKit/FBSDKCoreKit/AppLink/Resolver/*.h',
-                             'FBSDKCoreKit/FBSDKCoreKit/GraphAPI/*.h'
+    ss.public_header_files = 'FBSDKCoreKit/FBSDKCoreKit/include/*.h'
     ss.private_header_files = 'FBSDKCoreKit/FBSDKCoreKit/Internal/**/*.h',
                               'FBSDKCoreKit/FBSDKCoreKit/AppEvents/Internal/**/*.h'
     ss.resource_bundles = { 'FacebookSDKStrings' => ['FacebookSDKStrings.bundle/**/*.strings'] }

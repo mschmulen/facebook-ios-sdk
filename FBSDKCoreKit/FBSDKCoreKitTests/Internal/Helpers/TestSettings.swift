@@ -23,13 +23,14 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
   static var userAgentSuffix: String?
   static var loggingBehaviors = Set<LoggingBehavior>()
   static var sdkVersion: String?
+
   var logWarningsCallCount = 0
   var logIfSDKSettingsChangedCallCount = 0
   var recordInstallCallCount = 0
 
   var appID: String?
 
-  var stubbedGraphAPIVersion = FBSDK_TARGET_PLATFORM_VERSION
+  var stubbedGraphAPIVersion = FBSDK_DEFAULT_GRAPH_API_VERSION
   var advertisingTrackingStatus: AdvertisingTrackingStatus = .unspecified
   var stubbedIsDataProcessingRestricted = false
   var stubbedIsAutoLogAppEventsEnabled = false
@@ -40,6 +41,8 @@ class TestSettings: NSObject, SettingsProtocol, SettingsLogging {
   var stubbedIsSKAdNetworkReportEnabled = false
   var stubbedLimitEventAndDataUsage = false
   var shouldUseTokenOptimizations = true
+  var isGraphErrorRecoveryEnabled = false
+  var graphAPIDebugParamValue: String?
 
   var isDataProcessingRestricted: Bool {
     stubbedIsDataProcessingRestricted

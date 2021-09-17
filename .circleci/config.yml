@@ -3,7 +3,7 @@ version: 2.1
 executors:
   xcode:
     macos:
-      xcode: 12.4.0
+      xcode: 12.5.0
 
 useMacOS: &useMacOS
   executor: xcode
@@ -19,9 +19,14 @@ tagFilters: &onlyRunOnTags
     tags:
       only: /^v([0-9]{1}|[1-9][0-9]+)\.([0-9]{1}|[1-9][0-9]+)\.([0-9]{1}|[1-9][0-9]+)($|[-+][0-9A-Za-z+.-]+$)/
 
+requiresProjectGeneration: &requiresProjectGeneration
+  requires:
+    - setup
+    - generate-projects
+
 commands:
   setup:
-    description: Runs before each job and checks out the source code
+    description: Runs before each job and checks out the source code and installs dependencies
     steps:
       - checkout
       - install_gems
@@ -29,6 +34,25 @@ commands:
           root: .
           paths:
             - .
+
+  install_xcodegen:
+    description: Installs xcodegen
+    steps:
+      - run:
+          name: Install Xcodegen
+          command: brew install xcodegen
+
+  generate_projects:
+    description: Generates xcode projects
+    steps:
+      - attach_workspace:
+          at: .
+      - run:
+          name: Bootstrap Carthage
+          command: carthage bootstrap --no-build
+      - run:
+          name: Generate Projects
+          command: ./generate-projects.sh
 
   install_gems:
     description: Installs ruby gems in the Gemfile
@@ -128,52 +152,12 @@ commands:
           at: .
       - run: sh scripts/run.sh lint cocoapods << parameters.arguments >>
 
-  publish_aggregate_cocoapod:
-    description: Pushes aggregate pod FacebookSDK to trunk
+  publish_cocoapods:
+    description: Pushes all CocoaPods to trunk
     steps:
       - attach_workspace:
           at: .
-      - run: |
-          rm -rf ~/Library/Caches/Cocoapods && \
-          rm -rf ~/.cocoapods/repos && \
-          pod repo update
-      - run: sh scripts/run.sh release cocoapods FacebookSDK
-
-  publish_corekit_basics:
-    description: Pushes Corekit_Basics to trunk
-    steps:
-      - attach_workspace:
-          at: .
-      - run: sh scripts/run.sh release cocoapods FBSDKCoreKit_Basics
-
-  publish_base_cocoapods:
-    description: Pushes Core to trunk
-    steps:
-      - attach_workspace:
-          at: .
-      - run: sh scripts/run.sh release cocoapods FBSDKCoreKit
-
-  publish_dependent_cocoapods:
-    description: Pushes Login and Share to trunk
-    steps:
-      - attach_workspace:
-          at: .
-      - run: |
-          rm -rf ~/Library/Caches/Cocoapods && \
-          rm -rf ~/.cocoapods/repos && \
-          pod repo update
-      - run: sh scripts/run.sh release cocoapods FBSDKLoginKit FBSDKShareKit
-
-  publish_top_level_cocoapods:
-    description: Pushes GamingServices and tvOS to trunk
-    steps:
-      - attach_workspace:
-          at: .
-      - run: |
-          rm -rf ~/Library/Caches/Cocoapods && \
-          rm -rf ~/.cocoapods/repos && \
-          pod repo update
-      - run: sh scripts/run.sh release cocoapods FBSDKGamingServicesKit FBSDKTVOSKit
+      - run: sh scripts/publish_cocoapods.sh
 
   publish_to_github:
     description: Creates a draft for a release on github
@@ -221,6 +205,11 @@ jobs:
     <<: *useMacOS
     steps:
       - setup
+  generate-projects:
+    <<: *useMacOS
+    steps:
+      - install_xcodegen
+      - generate_projects
   build-for-release:
     <<: *useMacOS
     steps:
@@ -254,26 +243,10 @@ jobs:
     steps:
       - lint_cocoapods:
           arguments: --use-libraries
-  publish-aggregate-cocoapod:
+  publish-cocoapods:
     <<: *useMacOS
     steps:
-      - publish_aggregate_cocoapod
-  publish-corekit-basics:
-    <<: *useMacOS
-    steps:
-      - publish_corekit_basics
-  publish-base-cocoapods:
-    <<: *useMacOS
-    steps:
-      - publish_base_cocoapods
-  publish-dependent-cocoapods:
-    <<: *useMacOS
-    steps:
-      - publish_dependent_cocoapods
-  publish-top-level-cocoapods:
-    <<: *useMacOS
-    steps:
-      - publish_top_level_cocoapods
+      - publish_cocoapods
   publish-to-github:
     docker:
       - image: cibuilds/github:0.13
@@ -296,14 +269,16 @@ workflows:
   test:
     jobs:
       - setup
+      - generate-projects:
+          <<: *requiresSetup
       - build-swift-packages:
           <<: *requiresSetup
       - build-xcode-debug:
-          <<: *requiresSetup
+          <<: *requiresProjectGeneration
       - build-xcode-release:
-          <<: *requiresSetup
+          <<: *requiresProjectGeneration
       - build-carthage:
-          <<: *requiresSetup
+          <<: *requiresProjectGeneration
       - integrate-spm:
           <<: *requiresSetup
       - lint-cocoapods:
@@ -313,39 +288,25 @@ workflows:
       - verify-spm-headers:
           <<: *requiresSetup
       - verify-xcode-integration:
-          <<: *requiresSetup
+          <<: *requiresProjectGeneration
   release:
     jobs:
       - setup:
           <<: *onlyRunOnTags
+      - generate-projects:
+          <<: *requiresSetup
       - build-for-release:
           <<: *onlyRunOnTags
-          <<: *requiresSetup
+          <<: *requiresProjectGeneration
       - publish-to-github:
           <<: *onlyRunOnTags
           requires:
             - build-for-release
-      - publish-corekit-basics:
+      - publish-cocoapods:
           <<: *onlyRunOnTags
           <<: *requiresSetup
-      - publish-base-cocoapods:
-          <<: *onlyRunOnTags
-          requires:
-            - publish-corekit-basics
-      - publish-dependent-cocoapods:
-          <<: *onlyRunOnTags
-          requires:
-            - publish-base-cocoapods
-      - publish-top-level-cocoapods:
-          <<: *onlyRunOnTags
-          requires:
-            - publish-dependent-cocoapods
-      - publish-aggregate-cocoapod:
-          <<: *onlyRunOnTags
-          requires:
-            - publish-top-level-cocoapods
       - verify-release:
           <<: *onlyRunOnTags
           requires:
-            - publish-aggregate-cocoapod
+            - publish-cocoapods
             - publish-to-github

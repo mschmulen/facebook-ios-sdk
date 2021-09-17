@@ -28,7 +28,7 @@
 #import "FBSDKCoreKitVersions.h"
 #import "FBSDKDataPersisting.h"
 #import "FBSDKEventLogging.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 
 #define FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(TYPE, PLIST_KEY, PROPERTY_NAME, SETTER, DEFAULT_VALUE, ENABLE_CACHE) \
   + (TYPE *)PROPERTY_NAME \
@@ -61,9 +61,6 @@
     } \
     [self logIfSDKSettingsChanged]; \
   }
-
-#define FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(TYPE, PROPERTY_NAME, SETTER) \
-  @property (nullable, nonatomic, getter = PROPERTY_NAME, setter = SETTER:, copy) TYPE *PROPERTY_NAME;
 
 #define FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IVAR_DECL(TYPE, PROPERTY_NAME) \
   TYPE *_ ## PROPERTY_NAME;
@@ -117,18 +114,6 @@ static NSString *const advertiserIDCollectionEnabledFalseWarning =
 @property (nullable, nonatomic) NSNumber *advertiserTrackingStatusBacking;
 @property (nonatomic) BOOL isConfigured;
 @property (nonatomic) NSString *graphAPIVersion;
-
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, appID, setAppID);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, appURLSchemeSuffix, setAppURLSchemeSuffix);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, clientToken, setClientToken);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, displayName, setDisplayName);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSString, facebookDomainPart, setFacebookDomainPart);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _JPEGCompressionQualityNumber, _setJPEGCompressionQualityNumber);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _instrumentEnabled, _setInstrumentEnabled);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _autoLogAppEventsEnabled, _setAutoLogAppEventsEnabled);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _advertiserIDCollectionEnabled, _setAdvertiserIDCollectionEnabled);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _SKAdNetworkReportEnabled, _setSKAdNetworkReportEnabled);
-FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_DECL(NSNumber, _codelessDebugLogEnabled, _setCodelessDebugLogEnabled);
 
 @end
 
@@ -234,6 +219,11 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
 + (BOOL)isGraphErrorRecoveryEnabled
 {
   return !g_disableErrorRecovery;
+}
+
+- (BOOL)isGraphErrorRecoveryEnabled
+{
+  return [[self class] isGraphErrorRecoveryEnabled];
 }
 
 + (void)setGraphErrorRecoveryEnabled:(BOOL)graphErrorRecoveryEnabled
@@ -513,7 +503,8 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
   if (!self.isConfigured) {
     static NSString *const reason = @"As of v9.0, you must initialize the SDK prior to calling any methods or setting any properties. "
     "You can do this by calling `FBSDKApplicationDelegate`'s `application:didFinishLaunchingWithOptions:` method."
-    "Learn more: https://developers.facebook.com/docs/ios/getting-started";
+    "Learn more: https://developers.facebook.com/docs/ios/getting-started"
+    "If no `UIApplication` is available you can use `FBSDKApplicationDelegate`'s `initializeSDK` method.";
     @throw [NSException exceptionWithName:@"InvalidOperationException" reason:reason userInfo:nil];
   }
 #endif
@@ -542,7 +533,7 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
 
 + (NSString *)defaultGraphAPIVersion
 {
-  return FBSDK_TARGET_PLATFORM_VERSION;
+  return FBSDK_DEFAULT_GRAPH_API_VERSION;
 }
 
 + (NSString *)graphAPIVersion
@@ -740,10 +731,15 @@ FBSDKSETTINGS_PLIST_CONFIGURATION_SETTING_IMPL(
   return nil;
 }
 
+- (NSString *)graphAPIDebugParamValue
+{
+  return [[self class] graphAPIDebugParamValue];
+}
+
 #pragma mark - Testability
 
 #if DEBUG
- #if FBSDKTEST
+ #if FBTEST
 
 + (void)reset
 {

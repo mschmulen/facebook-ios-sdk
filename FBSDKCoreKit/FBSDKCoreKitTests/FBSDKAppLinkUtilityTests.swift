@@ -17,6 +17,7 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import FBSDKCoreKit
+import TestTools
 
 class FBSDKAppLinkUtilityTests: XCTestCase {
 
@@ -103,7 +104,7 @@ class FBSDKAppLinkUtilityTests: XCTestCase {
     AppEvents.singleton.configure(
       withGateKeeperManager: TestGateKeeperManager.self,
       appEventsConfigurationProvider: TestAppEventsConfigurationProvider.self,
-      serverConfigurationProvider: TestServerConfigurationProvider.self,
+      serverConfigurationProvider: TestServerConfigurationProvider(),
       graphRequestProvider: TestGraphRequestFactory(),
       featureChecker: TestFeatureManager(),
       store: UserDefaultsSpy(),
@@ -116,7 +117,8 @@ class FBSDKAppLinkUtilityTests: XCTestCase {
       restrictiveDataFilterParameterProcessor: TestAppEventsParameterProcessor(),
       atePublisherFactory: TestAtePublisherFactory(),
       appEventsStateProvider: TestAppEventsStateProvider(),
-      swizzler: TestSwizzler.self
+      swizzler: TestSwizzler.self,
+      advertiserIDProvider: TestAdvertiserIDProvider()
     )
 
     AppLinkUtility.fetchDeferredAppLink()

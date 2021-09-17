@@ -25,7 +25,7 @@
  #import "FBSDKBridgeAPIRequest+Private.h"
  #import "FBSDKConstants.h"
  #import "FBSDKCoreKitBasicsImport.h"
- #import "FBSDKInternalUtility.h"
+ #import "FBSDKInternalUtility+Internal.h"
  #import "FBSDKOperatingSystemVersionComparing.h"
  #import "NSProcessInfo+Protocols.h"
 
@@ -75,7 +75,7 @@
   } else {
     switch (protocolType) {
       case FBSDKBridgeAPIProtocolTypeNative: {
-        if (![FBSDKInternalUtility isFacebookBundleIdentifier:sourceApplication]) {
+        if (![FBSDKInternalUtility.sharedUtility isFacebookBundleIdentifier:sourceApplication]) {
           if (errorRef != NULL) {
             *errorRef = [[NSError alloc] initWithDomain:FBSDKErrorDomain
                                                    code:FBSDKErrorBridgeAPIResponse
@@ -86,7 +86,7 @@
         break;
       }
       case FBSDKBridgeAPIProtocolTypeWeb: {
-        if (![FBSDKInternalUtility isSafariBundleIdentifier:sourceApplication]) {
+        if (![FBSDKInternalUtility.sharedUtility isSafariBundleIdentifier:sourceApplication]) {
           if (errorRef != NULL) {
             *errorRef = [[NSError alloc] initWithDomain:FBSDKErrorDomain
                                                    code:FBSDKErrorBridgeAPIResponse

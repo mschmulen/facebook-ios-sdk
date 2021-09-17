@@ -17,7 +17,6 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import FBSDKCoreKit_Basics
-import TestTools
 import XCTest
 
 class UrlSessionTaskTests: XCTestCase {
@@ -31,9 +30,9 @@ class UrlSessionTaskTests: XCTestCase {
 
     provider.stubbedDataTask = dataTask
     task = UrlSessionTask(
-       request: SampleUrlRequest.valid,
-       fromSession: provider
-     ) { _, _, _ in }
+      request: SampleUrlRequest.valid,
+      fromSession: provider
+    ) { _, _, _ in }
   }
 
   func testStarting() {

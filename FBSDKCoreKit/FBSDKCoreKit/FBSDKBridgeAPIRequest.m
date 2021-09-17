@@ -27,13 +27,16 @@
  #import "FBSDKBridgeAPIProtocolWebV1.h"
  #import "FBSDKBridgeAPIProtocolWebV2.h"
  #import "FBSDKCoreKitBasicsImport.h"
- #import "FBSDKInternalUtility.h"
+ #import "FBSDKInternalUtility+Internal.h"
  #import "FBSDKSettings.h"
 
 NSString *const FBSDKBridgeAPIAppIDKey = @"app_id";
 NSString *const FBSDKBridgeAPISchemeSuffixKey = @"scheme_suffix";
 NSString *const FBSDKBridgeAPIVersionKey = @"version";
 
+ #if FBSDK_SWIFT_PACKAGE
+NS_EXTENSION_UNAVAILABLE("The Facebook iOS SDK is not currently supported in extensions")
+ #endif
 @implementation FBSDKBridgeAPIRequest
 
  #pragma mark - Class Methods
@@ -115,7 +118,7 @@ NSString *const FBSDKBridgeAPIVersionKey = @"version";
     return nil;
   }
 
-  [FBSDKInternalUtility validateURLSchemes];
+  [FBSDKInternalUtility.sharedUtility validateURLSchemes];
 
   NSDictionary<NSString *, NSString *> *requestQueryParameters = [FBSDKBasicUtility dictionaryWithQueryString:requestURL.query];
   NSMutableDictionary *queryParameters = [[NSMutableDictionary alloc] initWithDictionary:requestQueryParameters];
@@ -123,11 +126,11 @@ NSString *const FBSDKBridgeAPIVersionKey = @"version";
   [FBSDKTypeUtility dictionary:queryParameters
                      setObject:[FBSDKSettings appURLSchemeSuffix]
                         forKey:FBSDKBridgeAPISchemeSuffixKey];
-  requestURL = [FBSDKInternalUtility URLWithScheme:requestURL.scheme
-                                              host:requestURL.host
-                                              path:requestURL.path
-                                   queryParameters:queryParameters
-                                             error:errorRef];
+  requestURL = [FBSDKInternalUtility.sharedUtility URLWithScheme:requestURL.scheme
+                                                            host:requestURL.host
+                                                            path:requestURL.path
+                                                 queryParameters:queryParameters
+                                                           error:errorRef];
   return requestURL;
 }
 

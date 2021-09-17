@@ -63,6 +63,18 @@ static BOOL _isConfigured;
       return;
     }
 
+    if (@available(iOS 14.5, *)) {
+      NSString *defaultAdvertiserID = @"00000000-0000-0000-0000-000000000000";
+      BOOL isAdvertiserIDMissingOrDefault = !FBSDKAppEventsUtility.shared.advertiserID
+      || [FBSDKAppEventsUtility.shared.advertiserID isEqualToString:defaultAdvertiserID];
+
+      if (handler && isAdvertiserIDMissingOrDefault) {
+        NSError *error = [[NSError alloc] initWithDomain:@"ATTrackingManager.AuthorizationStatus must be `authorized` for deferred deep linking to work. Read more at: https://developer.apple.com/documentation/apptrackingtransparency" code:-1 userInfo:nil];
+        handler(nil, error);
+        return;
+      }
+    }
+
     NSString *appID = [FBSDKSettings appID];
 
     // Deferred app links are only currently used for engagement ads, thus we consider the app to be an advertising one.
@@ -151,14 +163,15 @@ static BOOL _isConfigured;
   if (!_isConfigured) {
     static NSString *const reason = @"As of v9.0, you must initialize the SDK prior to calling any methods or setting any properties. "
     "You can do this by calling `FBSDKApplicationDelegate`'s `application:didFinishLaunchingWithOptions:` method."
-    "Learn more: https://developers.facebook.com/docs/ios/getting-started";
+    "Learn more: https://developers.facebook.com/docs/ios/getting-started"
+    "If no `UIApplication` is available you can use `FBSDKApplicationDelegate`'s `initializeSDK` method.";
     @throw [NSException exceptionWithName:@"InvalidOperationException" reason:reason userInfo:nil];
   }
 #endif
 }
 
  #if DEBUG
-  #if FBSDKTEST
+  #if FBTEST
 
 + (void)reset
 {

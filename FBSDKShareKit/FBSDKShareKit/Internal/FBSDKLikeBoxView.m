@@ -22,11 +22,6 @@
 
  #import "FBSDKLikeBoxView.h"
 
- #ifdef FBSDKCOCOAPODS
-  #import <FBSDKCoreKit/FBSDKCoreKit+Internal.h>
- #else
-  #import "FBSDKCoreKit+Internal.h"
- #endif
  #import "FBSDKLikeBoxBorderView.h"
 
 @implementation FBSDKLikeBoxView
@@ -45,7 +40,7 @@
   return self;
 }
 
-- (id)initWithCoder:(NSCoder *)decoder
+- (instancetype)initWithCoder:(NSCoder *)decoder
 {
   if ((self = [super initWithCoder:decoder])) {
     [self _initializeContent];

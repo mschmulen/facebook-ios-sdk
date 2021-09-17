@@ -18,12 +18,6 @@
 
 #import "FBSDKHashtag.h"
 
-#ifdef FBSDKCOCOAPODS
- #import <FBSDKCoreKit/FBSDKCoreKit+Internal.h>
-#else
- #import "FBSDKCoreKit+Internal.h"
-#endif
-
 #define FBSDK_HASHTAG_STRING_KEY @"hashtag"
 
 static NSRegularExpression *HashtagRegularExpression()
@@ -92,7 +86,7 @@ static NSRegularExpression *HashtagRegularExpression()
 - (BOOL)isEqualToHashtag:(FBSDKHashtag *)hashtag
 {
   return (hashtag
-    && [FBSDKInternalUtility object:_stringRepresentation isEqualToObject:hashtag.stringRepresentation]);
+    && [FBSDKInternalUtility.sharedUtility object:_stringRepresentation isEqualToObject:hashtag.stringRepresentation]);
 }
 
 #pragma mark - NSCoding

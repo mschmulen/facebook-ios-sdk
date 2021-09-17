@@ -20,7 +20,7 @@ import FBSDKCoreKit
 import TestTools
 import XCTest
 
-class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
+class ErrorReportTests: XCTestCase {
 
   let code = 2
   let domain = "test"
@@ -220,8 +220,9 @@ class ErrorReportTests: XCTestCase { // swiftlint:disable:this type_body_length
 
     report.uploadErrors()
 
-    guard let reports = factory.capturedParameters["error_reports"] as? String,
-          let data = reports.data(using: .utf8)
+    guard
+      let reports = factory.capturedParameters["error_reports"] as? String,
+      let data = reports.data(using: .utf8)
     else {
       return XCTFail("Should upload reports as an array of strings")
     }

@@ -71,7 +71,7 @@
 
 + (BOOL)buildWebShareContent:(id<FBSDKSharingContent>)content
                   methodName:(NSString *__autoreleasing *)methodNameRef
-                  parameters:(NSDictionary *__autoreleasing *)parametersRef
+                  parameters:(NSDictionary<NSString *, id> *__autoreleasing *)parametersRef
                        error:(NSError *__autoreleasing *)errorRef
 {
   NSString *methodName = @"share";
@@ -457,7 +457,7 @@
 
 + (BOOL)validateNetworkURL:(NSURL *)URL name:(NSString *)name error:(NSError *__autoreleasing *)errorRef
 {
-  if (!URL || [FBSDKInternalUtility isBrowserURL:URL]) {
+  if (!URL || [FBSDKInternalUtility.sharedUtility isBrowserURL:URL]) {
     if (errorRef != NULL) {
       *errorRef = nil;
     }

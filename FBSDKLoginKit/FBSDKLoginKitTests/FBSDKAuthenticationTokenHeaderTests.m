@@ -20,6 +20,7 @@
 
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
+@import TestTools;
 #import "FBSDKLoginKitTests-Swift.h"
 
 @interface FBSDKAuthenticationTokenHeader (Testing)
@@ -32,13 +33,12 @@
 
 @interface FBSDKAuthenticationTokenHeaderTests : XCTestCase
 
+@property (nonatomic) FBSDKAuthenticationTokenHeader *header;
+@property (nonatomic) NSDictionary *headerDict;
+
 @end
 
 @implementation FBSDKAuthenticationTokenHeaderTests
-{
-  FBSDKAuthenticationTokenHeader *_header;
-  NSDictionary *_headerDict;
-}
 
 - (void)setUp
 {

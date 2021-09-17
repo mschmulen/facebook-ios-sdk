@@ -19,7 +19,6 @@
 import FBSDKCoreKit
 import XCTest
 
-// swiftlint:disable type_body_length
 class ApplicationDelegateTests: XCTestCase {
 
   // swiftlint:disable:next implicitly_unwrapped_optional weak_delegate
@@ -34,6 +33,7 @@ class ApplicationDelegateTests: XCTestCase {
     infoDictionaryProvider: TestBundle(),
     eventLogger: TestAppEvents()
   )
+  let serverConfigurationProvider = TestServerConfigurationProvider()
   let bitmaskKey = "com.facebook.sdk.kits.bitmask"
   lazy var profile = Profile(
     userID: name,
@@ -61,7 +61,7 @@ class ApplicationDelegateTests: XCTestCase {
       settings: settings,
       featureChecker: featureChecker,
       appEvents: appEvents,
-      serverConfigurationProvider: TestServerConfigurationProvider.self,
+      serverConfigurationProvider: serverConfigurationProvider,
       store: store,
       authenticationTokenWallet: TestAuthenticationTokenWallet.self,
       profileProvider: TestProfileProvider.self,
@@ -78,7 +78,6 @@ class ApplicationDelegateTests: XCTestCase {
   static func resetTestData() {
     TestAccessTokenWallet.reset()
     TestAuthenticationTokenWallet.reset()
-    TestServerConfigurationProvider.reset()
     TestSettings.reset()
     TestGateKeeperManager.reset()
     TestProfileProvider.reset()
@@ -105,7 +104,7 @@ class ApplicationDelegateTests: XCTestCase {
       "Should use the expected default app events instance"
     )
     XCTAssertTrue(
-      ApplicationDelegate.shared.serverConfigurationProvider is ServerConfigurationManager.Type,
+      ApplicationDelegate.shared.serverConfigurationProvider is ServerConfigurationManager,
       "Should use the expected default server configuration provider"
     )
     XCTAssertEqual(
@@ -144,7 +143,7 @@ class ApplicationDelegateTests: XCTestCase {
       "Should be able to create with an app events instance"
     )
     XCTAssertTrue(
-      delegate.serverConfigurationProvider is TestServerConfigurationProvider.Type,
+      delegate.serverConfigurationProvider is TestServerConfigurationProvider,
       "Should be able to create with a server configuration provider"
     )
     XCTAssertEqual(
@@ -332,7 +331,7 @@ class ApplicationDelegateTests: XCTestCase {
     delegate.application(UIApplication.shared, didFinishLaunchingWithOptions: nil)
 
     XCTAssertTrue(
-      TestServerConfigurationProvider.loadServerConfigurationWasCalled,
+      serverConfigurationProvider.loadServerConfigurationWasCalled,
       "Should load a server configuration on finishing launching the application"
     )
   }

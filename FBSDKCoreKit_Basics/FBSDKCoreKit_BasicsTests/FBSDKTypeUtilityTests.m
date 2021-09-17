@@ -20,32 +20,33 @@
 
 #import <FBSDKCoreKit_Basics/FBSDKCoreKit_Basics.h>
 
-#import <TestTools/TestTools-Swift.h>
-
 #import "FBSDKCoreKit_BasicsTests-Swift.h"
 
 @interface FBSDKTypeUtilityTests : XCTestCase
 
 @end
 
+@interface FBSDKTypeUtilityTests ()
+
+@property (nonatomic) NSArray *validJSONObjects;
+@property (nonatomic) NSArray *invalidJSONObjects;
+
+@end
+
 @implementation FBSDKTypeUtilityTests
-{
-  NSArray *validJSONObjects;
-  NSArray *invalidJSONObjects;
-}
 
 - (void)setUp
 {
   [super setUp];
 
-  validJSONObjects = @[
+  self.validJSONObjects = @[
     @{ @"foo" : @"bar" },
     @[@1, @2, @3],
     @[],
     @{},
   ];
 
-  invalidJSONObjects = @[
+  self.invalidJSONObjects = @[
     @"SomeString",
     @{ @1 : @"one" },
     @"",
@@ -54,14 +55,14 @@
 
 - (void)testIsValidJSONWithValidJSON
 {
-  for (id object in validJSONObjects) {
+  for (id object in self.validJSONObjects) {
     XCTAssertTrue([FBSDKTypeUtility isValidJSONObject:object], @"%@ is not a valid json object", object);
   }
 }
 
 - (void)testIsValidJSONWithInvalidJSON
 {
-  for (id object in invalidJSONObjects) {
+  for (id object in self.invalidJSONObjects) {
     XCTAssertFalse([FBSDKTypeUtility isValidJSONObject:object], @"%@ is a valid json object", object);
   }
 }
@@ -76,7 +77,7 @@
 
 - (void)testDataWithJSONObjectWithValidJSON
 {
-  for (id object in validJSONObjects) {
+  for (id object in self.validJSONObjects) {
     XCTAssertNotNil(
       [FBSDKTypeUtility dataWithJSONObject:object options:NSJSONWritingPrettyPrinted error:nil],
       "Valid json object %@ should produce data",
@@ -87,7 +88,7 @@
 
 - (void)testDataWithJSONObjectWithInvalidJSON
 {
-  for (id object in invalidJSONObjects) {
+  for (id object in self.invalidJSONObjects) {
     XCTAssertNil(
       [FBSDKTypeUtility dataWithJSONObject:object options:NSJSONWritingPrettyPrinted error:nil],
       "Valid json object %@ should produce data",
@@ -98,7 +99,7 @@
 
 - (void)testJSONObjectWithDataWithValidData
 {
-  for (id object in validJSONObjects) {
+  for (id object in self.validJSONObjects) {
     NSData *data = [FBSDKTypeUtility dataWithJSONObject:object options:NSJSONWritingPrettyPrinted error:nil];
 
     XCTAssertEqualObjects(

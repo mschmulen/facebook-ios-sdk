@@ -25,7 +25,7 @@
  #import "FBSDKCodelessPathComponent.h"
  #import "FBSDKCoreKitBasicsImport.h"
  #import "FBSDKEventLogging.h"
- #import "FBSDKInternalUtility.h"
+ #import "FBSDKInternalUtility+Internal.h"
  #import "FBSDKSwizzler.h"
  #import "FBSDKUtility.h"
  #import "FBSDKViewHierarchy.h"
@@ -130,6 +130,9 @@ static id<FBSDKNumberParsing> _numberParser;
 + (BOOL)  match:(NSObject *)view
   pathComponent:(FBSDKCodelessPathComponent *)component
 {
+  if (!view) {
+    return NO;
+  }
   NSString *className = NSStringFromClass([view class]);
   if (![className isEqualToString:component.className]) {
     return NO;

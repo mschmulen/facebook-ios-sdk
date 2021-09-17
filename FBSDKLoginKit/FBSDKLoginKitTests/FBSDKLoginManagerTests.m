@@ -72,10 +72,16 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 
 @end
 
+@interface FBSDKServerConfigurationManager ()
+
++ (FBSDKServerConfigurationManager *)shared;
+
+@end
+
 @interface TestFBSDKBridgeAPI : FBSDKBridgeAPI
 
-@property int openURLWithSFVCCount;
-@property int openURLCount;
+@property (nonatomic) int openURLWithSFVCCount;
+@property (nonatomic) int openURLCount;
 
 @end
 
@@ -100,22 +106,19 @@ static NSString *const kFakeJTI = @"a jti is just any string";
 
 @interface FBSDKLoginManagerTests : XCTestCase
 
+@property (nonatomic) id mockInternalUtility;
+@property (nonatomic) id mockLoginManager;
+@property (nonatomic) id mockAccessTokenClass;
+@property (nonatomic) id mockAuthenticationTokenClass;
+@property (nonatomic) id mockProfileClass;
+@property (nonatomic) id mockBridgeAPIClass;
+@property (nonatomic) TestFBSDKBridgeAPI *testBridgeAPI;
+@property (nonatomic) NSDictionary *claims;
+@property (nonatomic) NSDictionary *header;
+
 @end
 
 @implementation FBSDKLoginManagerTests
-{
-  id _mockInternalUtility;
-  id _mockLoginManager;
-  id _mockAccessTokenClass;
-  id _mockAuthenticationTokenClass;
-  id _mockProfileClass;
-  id _mockBridgeAPIClass;
-
-  TestFBSDKBridgeAPI *_testBridgeAPI;
-
-  NSDictionary *_claims;
-  NSDictionary *_header;
-}
 
 - (void)setUp
 {
@@ -129,8 +132,8 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   [FBSDKProfile setCurrentProfile:nil];
   [FBSDKAccessToken setCurrentAccessToken:nil];
 
-  _mockInternalUtility = OCMClassMock(FBSDKInternalUtility.class);
-  OCMStub(ClassMethod([_mockInternalUtility validateURLSchemes]));
+  _mockInternalUtility = OCMPartialMock(FBSDKInternalUtility.sharedUtility);
+  OCMStub([_mockInternalUtility validateURLSchemes]);
 
   _mockLoginManager = OCMPartialMock([FBSDKLoginManager new]);
   OCMStub([_mockLoginManager loadExpectedChallenge]).andReturn(kFakeChallenge);
@@ -564,10 +567,12 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   // Mock some methods to force an error callback.
   [[[_mockInternalUtility stub] andReturnValue:@NO] isFacebookAppInstalled];
   NSError *URLError = [[NSError alloc] initWithDomain:FBSDKErrorDomain code:0 userInfo:nil];
-  [[_mockInternalUtility stub] appURLWithHost:OCMOCK_ANY
-                                         path:OCMOCK_ANY
-                              queryParameters:OCMOCK_ANY
-                                        error:((NSError __autoreleasing **)[OCMArg setTo:URLError])];
+  OCMStub(
+    [_mockInternalUtility appURLWithHost:OCMOCK_ANY
+                                    path:OCMOCK_ANY
+                         queryParameters:OCMOCK_ANY
+                                   error:((NSError __autoreleasing **)[OCMArg setTo:URLError])]
+  );
 
   __block BOOL handlerCalled;
   FBSDKLoginManager *manager = [FBSDKLoginManager new];
@@ -593,6 +598,7 @@ static NSString *const kFakeJTI = @"a jti is just any string";
   FBSDKServerConfiguration *mockConfig = [OCMockObject niceMockForClass:FBSDKServerConfiguration.class];
   OCMStub([mockConfig useSafariViewControllerForDialogName:FBSDKDialogConfigurationNameLogin]).andReturn(NO);
   id mockConfigManagerClass = OCMClassMock(FBSDKServerConfigurationManager.class);
+  OCMStub([mockConfigManagerClass shared]).andReturn(mockConfigManagerClass);
   OCMStub([mockConfigManagerClass cachedServerConfiguration]).andReturn(mockConfig);
 
   FBSDKLoginManager *manager = [FBSDKLoginManager new];

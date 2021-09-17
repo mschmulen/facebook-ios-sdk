@@ -32,8 +32,8 @@
 #import "FBSDKConstants.h"
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKDynamicFrameworkLoader.h"
-#import "FBSDKError.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKError+Internal.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKLogger.h"
 #import "FBSDKSettings.h"
 #import "FBSDKSettings+Internal.h"
@@ -481,8 +481,8 @@ static ASIdentifierManager *_cachedAdvertiserIdentifierManager;
   return matches > 0;
 }
 
-#if DEBUG 
- #if FBSDKTEST && !FBSDK_IDFA_DISALLOWED
+#if DEBUG
+ #if FBTEST && !FBSDK_IDFA_DISALLOWED
 
 + (ASIdentifierManager *)cachedAdvertiserIdentifierManager
 {

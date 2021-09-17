@@ -23,8 +23,7 @@
 #import "FBSDKAppEvents+Internal.h"
 #import "FBSDKCoreKitBasicsImport.h"
 #import "FBSDKEventLogging.h"
-#import "FBSDKGraphRequestProviding.h"
-#import "FBSDKInternalUtility.h"
+#import "FBSDKInternalUtility+Internal.h"
 #import "FBSDKNotificationProtocols.h"
 
 @interface FBSDKViewImpressionTracker ()
@@ -36,6 +35,9 @@
 
 @end
 
+#if FBSDK_SWIFT_PACKAGE
+NS_EXTENSION_UNAVAILABLE("The Facebook iOS SDK is not currently supported in extensions")
+#endif
 @implementation FBSDKViewImpressionTracker
 {
   NSMutableSet *_trackedImpressions;
@@ -64,6 +66,9 @@ static dispatch_once_t token;
                                             eventLogger:eventLogger
                                    notificationObserver:notificationObserver
                                             tokenWallet:tokenWallet];
+    if (!_impressionTrackers) {
+      _impressionTrackers = [NSMutableDictionary new];
+    }
     [FBSDKTypeUtility dictionary:_impressionTrackers setObject:impressionTracker forKey:eventName];
   }
   return impressionTracker;
@@ -128,7 +133,7 @@ static dispatch_once_t token;
 }
 
 #if DEBUG
- #if FBSDKTEST
+ #if FBTEST
 
 + (void)reset
 {

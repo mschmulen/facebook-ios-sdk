@@ -71,7 +71,7 @@ class DrawableTests: XCTestCase {
 
     let redIcon = UIImage(
       named: "redSilhouette.png",
-      in: Bundle(for: FBSDKTestCase.self),
+      in: Bundle(for: DrawableTests.self),
       compatibleWith: nil
     )
 
@@ -85,8 +85,7 @@ class DrawableTests: XCTestCase {
   // MARK: Human Silhouette Icon
 
   func testImageWithInvalidSize() {
-    XCTAssertNil(HumanSilhouetteIcon().image(size: .zero),
-                 "An image must have a non-zero size")
+    XCTAssertNil(HumanSilhouetteIcon().image(size: .zero), "An image must have a non-zero size")
   }
 
   func testPlaceholderImageColor() {
@@ -97,7 +96,7 @@ class DrawableTests: XCTestCase {
     )
     let customIcon = UIImage(
       named: "customColorSilhouette.png",
-      in: Bundle(for: FBSDKTestCase.self),
+      in: Bundle(for: DrawableTests.self),
       compatibleWith: nil
     )
 
@@ -122,7 +121,7 @@ class DrawableTests: XCTestCase {
     )
     let storedImage = UIImage(
       named: "redLogo.png",
-      in: Bundle(for: FBSDKTestCase.self),
+      in: Bundle(for: DrawableTests.self),
       compatibleWith: nil
     )
 
@@ -151,7 +150,7 @@ class DrawableTests: XCTestCase {
 
     let storedImage = UIImage(
       named: "closeIcon.png",
-      in: Bundle(for: FBSDKTestCase.self),
+      in: Bundle(for: DrawableTests.self),
       compatibleWith: nil
     )
 

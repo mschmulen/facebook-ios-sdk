@@ -25,7 +25,6 @@
  #import <UIKit/UIKit.h>
 
  #import "FBSDKCoreKitBasicsImportForShareKit.h"
- #import "FBSDKCoreKitInternalImport.h"
  #import "FBSDKLikeActionController.h"
 
 // after 1 day, expire the cached states
@@ -58,7 +57,7 @@
   return YES;
 }
 
-- (id)initWithCoder:(NSCoder *)decoder
+- (instancetype)initWithCoder:(NSCoder *)decoder
 {
   NSString *accessTokenString = [decoder decodeObjectOfClass:[NSString class]
                                                       forKey:FBSDK_LIKE_ACTION_CONTROLLER_CACHE_ACCESS_TOKEN_KEY];
