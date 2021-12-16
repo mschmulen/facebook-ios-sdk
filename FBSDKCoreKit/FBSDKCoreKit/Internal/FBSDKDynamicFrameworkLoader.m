@@ -129,6 +129,7 @@ _fbsdkdfl_handle_get_impl_(Security)
   return fbsdkdfl_SFSafariViewControllerClass();
 }
 
+// MASTODO
 - (Class)asIdentifierManagerClass
 {
   return fbsdkdfl_ASIdentifierManagerClass();
@@ -304,19 +305,33 @@ CATransform3D fbsdkdfl_CATransform3DConcat(CATransform3D a, CATransform3D b)
   return f(a, b);
 }
 
+// MASTODO FakeASIdentifierManagerClass = ASIdentifierManager
+@interface FakeASIdentifierManagerClass : NSObject // this is a fake ASIdentifierManager
+
++ (FakeASIdentifierManagerClass *)sharedManager;
+
+@property (nonatomic, readonly) NSUUID *advertisingIdentifier;
+
+- (void)clearAdvertisingIdentifier API_UNAVAILABLE(ios, macos, tvos);
+@end
+
+
+
+
 // MASTODO
-//#pragma mark - Ad Support Classes
-//
+#pragma mark - Ad Support Classes
+
 //_fbsdkdfl_load_framework_once_impl_(AdSupport)
 //_fbsdkdfl_handle_get_impl_(AdSupport)
 //
 //#define _fbsdkdfl_AdSupport_get_c(SYMBOL) _fbsdkdfl_symbol_get_c(AdSupport, SYMBOL);
-//
-//Class fbsdkdfl_ASIdentifierManagerClass(void)
-//{
+
+Class fbsdkdfl_ASIdentifierManagerClass(void)
+{
 //  _fbsdkdfl_AdSupport_get_c(ASIdentifierManager);
 //  return c;
-//}
+  return [FakeASIdentifierManagerClass class];
+}
 
 #pragma mark - Safari Services
 _fbsdkdfl_load_framework_once_impl_(SafariServices)
